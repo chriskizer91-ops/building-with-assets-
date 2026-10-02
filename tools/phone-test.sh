@@ -80,11 +80,11 @@ play() {
 }
 
 # A freshly started emulator spends its first minutes setting up its own apps. Wait (at most
-# 150 s) for it to calm down, so its slowness isn't put down to Mooncart.
+# 90 s) for it to calm down, so its slowness isn't put down to Mooncart.
 settle() {
   local i load cpus
   cpus=$(adb shell nproc 2>/dev/null | tr -dc '0-9'); cpus=${cpus:-2}
-  for ((i = 0; i < 30; i++)); do
+  for ((i = 0; i < 18; i++)); do
     load=$(adb shell cat /proc/loadavg | cut -d' ' -f1 | tr -dc '0-9.')
     awk -v l="${load:-0}" -v c="$cpus" 'BEGIN { exit !(l + 0 < c + 0) }' && break
     sleep 5
@@ -132,8 +132,6 @@ if [ "${AIRPLANE:-1}" = 1 ]; then
   adb shell cmd connectivity airplane-mode enable >/dev/null 2>&1 || { adb shell svc wifi disable; adb shell svc data disable; }
   echo "airplane mode: $(adb shell settings get global airplane_mode_on | tr -d '\r') (1 = on)"
 fi
-settle
-
 adb logcat -c
 adb logcat Mooncart:V chromium:W AndroidRuntime:E ActivityManager:W ActivityTaskManager:W '*:S' > "$LOG" 2>&1 &
 LOGCAT=$!
@@ -142,6 +140,13 @@ trap 'kill $LOGCAT 2>/dev/null' EXIT
 # ------------------------------------------------------------------ play
 echo "--- starting Mooncart"
 adb shell am start -W -n "$PKG/.MainActivity" | grep -E "Status|TotalTime"
+if [ "$EMULATOR" = 1 ]; then
+  # the emulator's home screen app gets stuck redrawing itself for the new screen size and keeps
+  # saying it "isn't responding"; with Mooncart in front it isn't needed, so stop it
+  HOME_APP=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/null | tail -n 1 | cut -d/ -f1 | tr -d '\r')
+  case "$HOME_APP" in ""|android|"$PKG") ;; *) echo "stopping the home screen app ($HOME_APP)"; adb shell am force-stop "$HOME_APP" ;; esac
+fi
+settle
 wait_log "[mooncart] ready" 90 0 || { echo "!!! the console never got going"; FAIL=1; }
 shot 01-game-list 2
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
@@ -154,7 +159,8 @@ if play bogmire; then
   key KEYCODE_BACK
 fi
 play wickhollow-square && shot 05-wickhollow-square 4
-play sol-the-last-ember-warden && shot 06-sol-3d-model 6
+# (an emulator draws 3D with its processor: Sol's first picture takes it about half a minute)
+play sol-the-last-ember-warden && shot 06-sol-3d-model 30
 play the-realm-of-aethermoor-interactive-map && shot 07-aethermoor-map 3
 play aethermoor-character-ledger && shot 08-character-ledger 3
 if play what-the-map-forgot; then
@@ -192,7 +198,7 @@ if [ "$EMULATOR" = 1 ]; then adb shell wm size reset; adb shell wm density reset
 
 # copies of a few steps, for the release page
 mkdir -p "$OUT/screens"
-for f in 01-game-list 03-bogmire 04-game-menu 05-wickhollow-square 06-sol-3d-model 09-what-the-map-forgot 11-witch-way 13-library; do
+for f in 01-game-list 03-bogmire 04-game-menu 05-wickhollow-square 06-sol-3d-model 07-aethermoor-map 09-what-the-map-forgot 11-witch-way 13-library; do
   [ -f "$OUT/$f.png" ] && to_jpg "$OUT/$f.png" "$OUT/screens/android-$f.jpg" 1280
 done
 ls -la "$OUT/screens"

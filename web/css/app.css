@@ -161,7 +161,7 @@ body.lib-open #pads { display: none; }
 .tb:disabled { opacity: 0.38; cursor: default; }
 .tb-gap { width: 1px; height: 24px; background: var(--line2); margin: 0 6px; flex: none; }
 .tb-grow { flex: 1; }
-.search { flex: none; width: 190px; background: #0f0d1f; border: 1px solid var(--line2); border-radius: 6px; padding: 5px 9px; color: var(--ink); -webkit-user-select: text; user-select: text; }
+.search { flex: 0 1 190px; min-width: 110px; background: #0f0d1f; border: 1px solid var(--line2); border-radius: 6px; padding: 5px 9px; color: var(--ink); -webkit-user-select: text; user-select: text; }
 .search::placeholder { color: var(--dim); }
 .lib-main { flex: 1; min-height: 0; display: flex; }
 .lib-tree { flex: none; width: 230px; border-right: 1px solid var(--line); overflow-y: auto; padding: 6px 0; background: #13102a; }
@@ -218,7 +218,7 @@ body.lib-open #pads { display: none; }
   .lrow .c-played, .lrow .c-time { display: none; }
   .tb span { display: none; }
   .tb { padding: 6px 8px; }
-  .search { width: 130px; }
+  .search { flex-basis: 130px; }
   .lib-brand b { display: none; }
 }
 @media (max-width: 420px) {
