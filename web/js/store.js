@@ -78,7 +78,7 @@ export class Library {
       this.builtinFolders = d.builtinFolders || {};
       this.collectionVersion = d.collectionVersion || '';
     }
-    this.items[ROOT] = { id: ROOT, type: 'folder', name: 'Library', parent: null, ...(this.items[ROOT] || {}), id: ROOT, parent: null };
+    this.items[ROOT] = { type: 'folder', name: 'Library', ...(this.items[ROOT] || {}), id: ROOT, parent: null };
     await this.mergeCollection();
     this.repair();
     this.write();

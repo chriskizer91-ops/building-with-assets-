@@ -49,7 +49,7 @@ function bare(cssW, cssH) {
 // the bezel and controls, and centre it, so a fixed-shape screen doesn't leave empty plastic.
 function hug(L, AW, AH, shadow) {
   const b = L.body;
-  let dx = 0, dy = 0, cutW = 0, cutH = 0;
+  let cutW = 0, cutH = 0;
   if (L.mode === 'side') {
     const spareW = b.w - (L.wing * 2 + L.bezel.w);
     if (spareW > 0) cutW = spareW;

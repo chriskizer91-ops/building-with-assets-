@@ -4,7 +4,7 @@
 
 import { el, fmtBytes, fmtDuration, fmtWhen, saveKeyFor } from './util.js';
 import { MenuBar, showMenu, closeMenus } from './menu.js';
-import { modal, prompt, confirm, alertBox, choose, pickFolder, row, select, checkbox, dialogOpen } from './dialogs.js';
+import { modal, prompt, confirm, alertBox, pickFolder, row, select, checkbox, dialogOpen } from './dialogs.js';
 import { settings, KEY_CHOICES, DEFAULT_KEYMAP } from './store.js';
 import { native } from './native.js';
 import { saves, savesSize } from './saves.js';
