@@ -159,5 +159,5 @@ jobs:
           body_path: notes.md
           files: |
             apk/Mooncart-*.apk
-            phone-test/screens/*.jpg
+            phone-test/screens/*
           make_latest: true

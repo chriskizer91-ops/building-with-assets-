@@ -18,13 +18,21 @@ shot() {
   adb exec-out screencap -p > "$OUT/$1.png"
   echo "screenshot $1 ($(stat -c%s "$OUT/$1.png") bytes)"
 }
+# to_jpg in.png out.jpg width: with whatever image tool this machine has
+to_jpg() {
+  if command -v ffmpeg >/dev/null; then ffmpeg -y -loglevel error -i "$1" -vf "scale=$3:-2" -q:v 4 "$2"
+  elif command -v magick >/dev/null; then magick "$1" -resize "$3x$3" -quality 80 "$2"
+  elif command -v convert >/dev/null; then convert "$1" -resize "$3x$3" -quality 80 "$2"
+  else cp "$1" "${2%.jpg}.png"; fi
+}
 print_shots() {
-  [ "${PRINT_SHOTS:-}" = 1 ] && command -v convert >/dev/null || return 0
+  [ "${PRINT_SHOTS:-}" = 1 ] || return 0
   for f in "$@"; do
     [ -f "$OUT/$f.png" ] || continue
-    convert "$OUT/$f.png" -resize 640x640 -quality 55 "$OUT/$f.jpg"
+    to_jpg "$OUT/$f.png" "$OUT/$f.small.jpg" 640
+    [ -f "$OUT/$f.small.jpg" ] || continue
     echo "=== SHOT $f"
-    base64 -w 4000 "$OUT/$f.jpg"
+    base64 -w 4000 "$OUT/$f.small.jpg"
     echo "=== END"
   done
 }
@@ -67,12 +75,11 @@ if grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | grep -v -i "favicon" >/dev/null
   echo "!!! page errors:"; grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | head -20
 fi
 adb shell pidof "$PKG" >/dev/null || { echo "!!! the app is not running at the end"; FAIL=1; }
-# small copies of a few steps, for the release page
-if command -v convert >/dev/null; then
-  mkdir -p "$OUT/screens"
-  for f in 02-game-list 04-bogmire 05-game-menu 09-sol-packed-3d 12-library; do
-    [ -f "$OUT/$f.png" ] && convert "$OUT/$f.png" -resize 1280x1280 -quality 80 "$OUT/screens/android-$f.jpg"
-  done
-fi
-print_shots 02-game-list 04-bogmire
+# copies of a few steps, for the release page
+mkdir -p "$OUT/screens"
+for f in 02-game-list 04-bogmire 05-game-menu 09-sol-packed-3d 12-library; do
+  [ -f "$OUT/$f.png" ] && to_jpg "$OUT/$f.png" "$OUT/screens/android-$f.jpg" 1280
+done
+ls -la "$OUT/screens"
+print_shots 02-game-list
 exit $FAIL
