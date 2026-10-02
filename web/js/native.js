@@ -53,7 +53,11 @@ function android() {
   const host = 'mooncart.invalid';
   // the app starts the page with a secret after the #; every call has to carry it (games never see it)
   const m = /[#&]k=([a-f0-9]+)/.exec(location.hash);
-  const secret = m ? m[1] : '';
+  let secret = m ? m[1] : '';
+  try {
+    if (secret) sessionStorage.setItem('mooncart-k', secret);
+    else secret = sessionStorage.getItem('mooncart-k') || ''; // the page reloaded itself
+  } catch { /* storage off */ }
   if (m) history.replaceState(null, '', location.pathname + location.search);
   const call = (method, ...args) => A.call(secret, method, JSON.stringify(args));
   const slow = (method, ...args) => later((id) => A.callAsync(secret, method, JSON.stringify(args), id));
