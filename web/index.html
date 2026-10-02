@@ -24,5 +24,15 @@
 <div id="modal-root"></div>
 <div id="toast" role="status" hidden></div>
 <script type="module" src="js/main.js"></script>
+<script>
+  // If the phone's web engine is too old to run the console, say so instead of showing nothing.
+  setTimeout(function () {
+    if (document.documentElement.getAttribute('data-started')) return;
+    var p = document.createElement('div');
+    p.style.cssText = 'position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0a16;color:#ece6ff;font:16px/1.5 sans-serif;text-align:center';
+    p.innerHTML = '<div><p style="font-size:20px">Mooncart can\'t start on this phone yet.</p><p>Its web engine is too old. Connect to the internet once, open the Play Store and update <b>Android System WebView</b> (or <b>Chrome</b>), then open Mooncart again. After that it works offline.</p></div>';
+    document.body.appendChild(p);
+  }, 6000);
+</script>
 </body>
 </html>

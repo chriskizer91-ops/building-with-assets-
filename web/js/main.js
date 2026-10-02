@@ -13,6 +13,7 @@ import { setSoundsEnabled, unlockAudio, sfx } from './sound.js';
 import { installIcons } from './icons.js';
 
 const VERSION = '0.1.0';
+document.documentElement.setAttribute('data-started', '1');
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 
