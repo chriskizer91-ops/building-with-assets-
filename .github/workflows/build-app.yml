@@ -43,6 +43,9 @@ jobs:
           yes | "$SDKM" --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
       - name: Collect the games (clones each game's repository and builds it)
         run: node tools/collect-games.mjs
+        env:
+          # optional: a token that can read private game repositories
+          GAMES_TOKEN: ${{ secrets.GAMES_TOKEN }}
       - name: Build the app
         run: bash android/build.sh
         env:
@@ -110,7 +113,17 @@ jobs:
         with:
           name: game-list
           path: list
+      - name: Never publish private games from a public repository
+        id: guard
+        run: |
+          if [ "$(node -p 'require("./list/collection.json").hasPrivate ? 1 : 0')" = 1 ] && [ "${{ github.event.repository.private }}" != "true" ]; then
+            echo "::warning::This app has games from private repositories inside, and this repository is public, so it is not put on the Releases page. Download it from this run's artifacts instead, or make this repository private."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Write the release notes
+        if: steps.guard.outputs.ok == 'true'
         run: |
           node -e '
             const c = require("./list/collection.json");
@@ -132,6 +145,7 @@ jobs:
             require("fs").writeFileSync("notes.md", s);
           '
       - uses: softprops/action-gh-release@v2
+        if: steps.guard.outputs.ok == 'true'
         with:
           tag_name: v${{ needs.apk.outputs.version }}-build${{ github.run_number }}
           name: Mooncart ${{ needs.apk.outputs.version }} (build ${{ github.run_number }})

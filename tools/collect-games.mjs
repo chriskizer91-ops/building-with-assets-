@@ -26,6 +26,8 @@ const WORK = path.resolve(opt('work', path.join(ROOT, 'build', 'sources')));
 const LOCAL = opt('local', null);
 const MIRROR = opt('mirror', null);
 const ONLY = opt('only', null);
+// a token that can read private game repositories (GitHub secret GAMES_TOKEN); without it they're skipped
+const TOKEN = process.env.GAMES_TOKEN || '';
 const STRICT = !!opt('strict', false);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'games.json'), 'utf8'));
@@ -50,7 +52,7 @@ for (const [id, src] of Object.entries(manifest.sources)) {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   const repoName = src.repo.split('/')[1];
-  const info = { id, repo: src.repo, ok: false, commit: '', built: null, note: '' };
+  const info = { id, repo: src.repo, ok: false, commit: '', built: null, note: '', private: null };
   sources[id] = info;
   console.log(`\n== ${id}: ${src.repo}`);
   try {
@@ -61,11 +63,15 @@ for (const [id, src] of Object.entries(manifest.sources)) {
       info.commit = execFileSync('git', ['-C', from, 'rev-parse', src.ref || 'HEAD']).toString().trim();
     } else {
       fs.rmSync(dir, { recursive: true, force: true });
-      const args = ['clone', '--depth', '1', '--quiet'];
+      info.private = await isPrivate(src.repo);
+      const args = ['-c', 'credential.helper=', '-c', 'core.askPass=true', 'clone', '--depth', '1', '--quiet'];
       if (src.paths) args.push('--filter=blob:none', '--sparse');
       if (src.ref) args.push('--branch', src.ref);
-      args.push(`https://github.com/${src.repo}.git`, dir);
-      if (!run('git', args)) throw new Error('git clone failed');
+      const auth = TOKEN ? `x-access-token:${TOKEN}@` : '';
+      args.push(`https://${auth}github.com/${src.repo}.git`, dir);
+      if (!run('git', args, { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })) {
+        throw new Error(info.private !== false && !TOKEN ? 'private repository (add a GAMES_TOKEN secret that can read it)' : 'git clone failed');
+      }
       // only the files the games need, when the source says which
       if (src.paths && !run('git', ['-C', dir, 'sparse-checkout', 'set', '--no-cone', ...src.paths])) throw new Error('sparse checkout failed');
       info.commit = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD']).toString().trim();
@@ -81,6 +87,18 @@ for (const [id, src] of Object.entries(manifest.sources)) {
     info.built = run(src.build[0], src.build.slice(1), { cwd: dir });
     if (!info.built) { info.note = 'its build failed; using whatever pages it already has'; problems.push(`${id}: build failed`); }
   }
+}
+
+// Whether a GitHub repository is private (null if it can't be told).
+async function isPrivate(repo) {
+  try {
+    const headers = { 'user-agent': 'mooncart-collector', accept: 'application/vnd.github+json' };
+    if (TOKEN) headers.authorization = 'Bearer ' + TOKEN;
+    const r = await fetch('https://api.github.com/repos/' + repo, { headers, signal: AbortSignal.timeout(20000) });
+    if (r.status === 404) return true; // invisible without a token: private
+    if (!r.ok) return null;
+    return !!(await r.json()).private;
+  } catch { return null; }
 }
 
 // ---------------------------------------------------------------- 2. pack each game
@@ -159,6 +177,7 @@ for (const entry of manifest.games) {
       size: buf.length,
       hash: crypto.createHash('sha1').update(buf).digest('hex'),
       from: `${info.repo} @ ${info.commit.slice(0, 7)} : ${rel}`,
+      private: info.private || undefined,
       opts: entry.opts || undefined,
       packed: packed.length ? packed : undefined,
       needsNet: failed.length ? failed : undefined,
@@ -172,6 +191,7 @@ const collection = {
   about: 'Built-in games for Mooncart, made by tools/collect-games.mjs from games.json.',
   version: new Date().toISOString(),
   sources: Object.values(sources),
+  hasPrivate: games.some((g) => g.private),
   games,
 };
 fs.writeFileSync(path.join(OUT, 'collection.json'), JSON.stringify(collection, null, 1));

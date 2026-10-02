@@ -99,7 +99,6 @@ public class MainActivity extends Activity {
         server = new Server(getAssets(), store);
         bridge = new Bridge(this);
         Window w = getWindow();
-        w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = w.getAttributes();
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -107,6 +106,14 @@ public class MainActivity extends Activity {
         }
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
+        if (Build.VERSION.SDK_INT >= 30) {
+            // the console fills the whole screen, but the on-screen keyboard pushes it up
+            root.setOnApplyWindowInsetsListener((v, insets) -> {
+                int ime = insets.getInsets(WindowInsets.Type.ime()).bottom;
+                v.setPadding(0, 0, 0, ime);
+                return insets;
+            });
+        }
         setContentView(root);
         WebView.setWebContentsDebuggingEnabled(true);
         createWebView();
@@ -158,10 +165,13 @@ public class MainActivity extends Activity {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
+            String scheme = u.getScheme() == null ? "" : u.getScheme();
+            if (scheme.equals("about") || scheme.equals("data") || scheme.equals("blob")) return false;
             String host = u.getHost() == null ? "" : u.getHost();
             if (host.equals(Server.HOST) || host.endsWith("." + Server.HOST)) return false;
-            // a link out of a game: hand it to the phone's browser instead (only works online)
-            if (req.hasGesture() || !req.isForMainFrame()) openExternal(u.toString());
+            // a link out of a game: the phone's browser opens it if the player tapped it (and it's online);
+            // nothing else ever leaves the console
+            if (req.hasGesture()) openExternal(u.toString());
             return true;
         }
 

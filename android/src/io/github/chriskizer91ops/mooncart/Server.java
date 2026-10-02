@@ -73,24 +73,29 @@ final class Server {
         return null; // the real internet: only reached when a game asks and the phone is online
     }
 
+    private static String path(Uri u) {
+        String p = u.getEncodedPath();
+        return p == null || p.isEmpty() ? "/" : Uri.decode(p);
+    }
+
     private WebResourceResponse shell(Uri u) throws IOException {
-        String path = u.getPath() == null ? "/" : u.getPath();
+        String path = path(u);
         if (path.startsWith("/~raw/")) {
-            String src = Uri.decode(path.substring(6));
+            String src = path.substring(6);
             return ok(mime(src), store.open(src));
         }
         if (path.startsWith("/~thumb/")) {
-            File f = store.thumb(Uri.decode(path.substring(8)));
+            File f = store.thumb(path.substring(8));
             if (f == null || !f.isFile()) return text(404, "no picture");
             return ok("image/jpeg", new FileInputStream(f));
         }
-        String p = path.equals("/") ? "index.html" : Storage.safePath(Uri.decode(path));
+        String p = path.equals("/") ? "index.html" : Storage.safePath(path);
         if (p == null) return text(404, "not found");
         return asset("web/" + p);
     }
 
     private WebResourceResponse game(String slot, Uri u) throws IOException {
-        String path = u.getPath() == null ? "/" : Uri.decode(u.getPath());
+        String path = path(u);
         if (path.startsWith("/__mooncart/")) {
             String p = Storage.safePath(path.substring(12));
             return p == null ? text(404, "not found") : asset("web/__mooncart/" + p);

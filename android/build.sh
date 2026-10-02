@@ -46,7 +46,7 @@ fi
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" --auto-add-overlay
 
 # 3. code
-javac -source 8 -target 8 -Xlint:-options -encoding UTF-8 -bootclasspath "$PLATFORM" -d "$OUT/classes" \
+javac --release 8 -Xlint:-options -encoding UTF-8 -classpath "$PLATFORM" -d "$OUT/classes" \
   $(find android/src -name '*.java') $(find "$OUT/gen" -name '*.java')
 "$BT/d8" --release --min-api $MIN_API --lib "$PLATFORM" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 (cd "$OUT/dex" && zip -q -X "$OUT/unaligned.apk" classes.dex)
