@@ -4,6 +4,7 @@
 import { native } from './native.js';
 import { settings, DEFAULT_KEYMAP } from './store.js';
 import { showLoading, hideLoading, toast } from './screen.js';
+import { alertBox } from './dialogs.js';
 import { sfx } from './sound.js';
 import { Emitter } from './util.js';
 
@@ -69,7 +70,8 @@ export class GameHost {
       console.info(`[mooncart] ${item.saveKey} still loading after 25 s`);
       hideLoading(this.loadingLayer);
     }, 25000);
-    f.src = url;
+    if (native.loadFrame) native.loadFrame(f, item.saveKey); // a plain web browser: the game's own text
+    else f.src = url;
     this.frame = f;
     this.stage.replaceChildren(f);
     if (native.setKeyTarget) native.setKeyTarget(f.contentWindow);
@@ -167,7 +169,13 @@ export class GameHost {
     if (!m || m.mooncart !== 1) return;
     if (m.op === 'download' && typeof m.data === 'string') {
       native.saveFile(String(m.name || 'download').slice(0, 120), String(m.mime || 'application/octet-stream'), m.data, true)
-        .then((ok) => { if (ok) { sfx('select'); toast('Saved ' + (m.name || 'the file')); } });
+        .then((ok) => {
+          if (ok) { sfx('select'); toast('Saved ' + (m.name || 'the file')); }
+          else if (native.demo) toast('The demo page can’t save files. The Mooncart app can.');
+        });
+    } else if (m.op === 'alert' && native.demo) {
+      // the demo page's frame swallows a game's alert() boxes, so the console shows them
+      alertBox(this.item ? this.item.name : 'Game', String(m.text || '').slice(0, 2000));
     }
   }
 }

@@ -2,7 +2,8 @@
 
 Mooncart is a web page (the console, `web/`) inside a tiny Android app (`android/`) that shows
 it full screen and answers its requests from inside the phone. Games are web pages too; each
-runs in a frame on the console's screen.
+runs in a frame on the console's screen. The same console also runs on its own in a web browser
+(see *In a web browser* below).
 
 ## The pieces
 
@@ -19,7 +20,7 @@ runs in a frame on the console's screen.
 | `js/library-ui.js`, `js/menu.js`, `js/dialogs.js` | the library ("main menu"): menu bar, toolbar, folder tree, list or cartridge grid, dialogs |
 | `js/saves.js`, `__mooncart/helper.js`, `__mooncart/saves.html` | reading and writing each game's saved data (for backups and the save tools) |
 | `js/pack.js` | packs scripts, stylesheets and fonts a page loads from the internet into the page |
-| `js/native.js` | the only file that talks to the platform: Android's bridge, or the desktop test server |
+| `js/native.js` | the only file that talks to the platform: Android's bridge, the desktop test server, or a plain web browser |
 
 **The Android app** (`android/src/.../`, Java 8, no libraries)
 
@@ -51,6 +52,26 @@ runs in a frame on the console's screen.
 - **minSdk 24, targetSdk 35.** Android 7 is the oldest whose WebView can be updated to a modern engine.
 - **No Gradle.** `android/build.sh` calls the SDK's tools directly, so the build has nothing to download but the SDK.
 - **Pixelify Sans for names and menus, the phone's font for numbers and long text**: Pixelify's small digits blur together.
+
+## In a web browser
+
+`tools/build-demo.mjs` bundles the console (esbuild) into one page with its styles and fonts inside, for two uses:
+the demo page published as a Claude artifact (`build/demo/`, the sample games from `samples/` beside it) and
+`Mooncart.html` (`--standalone`, the samples inside it), which the workflow puts on the Releases page for laptops.
+Neither has the built-in games; people add their own.
+
+There `native.js` uses its `web()` bridge:
+
+- The library, settings and added games live in the browser's IndexedDB (database `mooncart`).
+- A game runs in a frame made from its own text (`srcdoc`), with the helper put in front of its scripts, since
+  a browser page can't give each game its own address. All games share the page's address, so the helper files a
+  game's localStorage, sessionStorage and IndexedDB names under `mc:<save slot>:`, and `saves.js` reads them there.
+- Button presses reach the game as synthetic key events, as with the test server.
+- No backups, cartridge pictures or offline packing there; on the demo page (inside the artifact viewer) files
+  can't be saved either, and the helper shows a game's `alert()` on the console because the viewer swallows it.
+
+`node tools/web-smoke.mjs` builds both and checks them: the demo inside a locked-down frame with a strict content
+security policy (roughly the artifact viewer's), and `Mooncart.html` opened from disk.
 
 ## The built-in games
 

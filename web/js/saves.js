@@ -33,10 +33,42 @@ function talk(key, op, payload = {}, timeout = 8000) {
   });
 }
 
+// In a plain web browser every game shares the page's address, and the helper files each
+// game's data under 'mc:<save slot>:' (see web/__mooncart/helper.js), so the console reads it
+// directly.
+const inBrowser = {
+  async dump(key) {
+    const p = 'mc:' + key + ':', local = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(p)) local[k.slice(p.length)] = localStorage.getItem(k);
+    }
+    return { local };
+  },
+  async restore(key, local, replace = true) {
+    const p = 'mc:' + key + ':';
+    if (replace) for (const k of Object.keys((await inBrowser.dump(key)).local)) localStorage.removeItem(p + k);
+    for (const [k, v] of Object.entries(local || {})) localStorage.setItem(p + k, String(v));
+    return { count: Object.keys(local || {}).length };
+  },
+  async clear(key) {
+    const p = 'mc:' + key + ':';
+    for (const store of [localStorage, sessionStorage]) {
+      const mine = [];
+      for (let i = 0; i < store.length; i++) { const k = store.key(i); if (k && k.startsWith(p)) mine.push(k); }
+      for (const k of mine) store.removeItem(k);
+    }
+    if (indexedDB.databases) {
+      for (const d of await indexedDB.databases().catch(() => [])) if (d.name && d.name.startsWith(p)) indexedDB.deleteDatabase(d.name);
+    }
+    return null;
+  },
+};
+
 export const saves = {
-  dump: (key) => talk(key, 'saves:dump'),
-  restore: (key, local, replace = true) => talk(key, 'saves:restore', { local, replace }),
-  clear: (key) => talk(key, 'saves:clear'),
+  dump: (key) => (native.platform === 'web' ? inBrowser.dump(key) : talk(key, 'saves:dump')),
+  restore: (key, local, replace = true) => (native.platform === 'web' ? inBrowser.restore(key, local, replace) : talk(key, 'saves:restore', { local, replace })),
+  clear: (key) => (native.platform === 'web' ? inBrowser.clear(key) : talk(key, 'saves:clear')),
   async dumpAll(keys) {
     const out = {};
     for (const k of [...new Set(keys)]) {

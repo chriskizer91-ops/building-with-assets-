@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Button Check</title>
+<style>
+  :root { --bg: #101024; --panel: #1b1a3a; --line: #34305f; --ink: #ece8ff; --dim: #9d96cf; --lit: #ffd166; --lit-ink: #241a00; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  body { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; box-sizing: border-box; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: 0.04em; }
+  p { margin: 0; color: var(--dim); font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .b { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; transition: background 80ms, color 80ms; }
+  .b b { font-size: 18px; }
+  .b span { color: var(--dim); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+  .b.on { background: var(--lit); color: var(--lit-ink); border-color: var(--lit); }
+  .b.on span { color: var(--lit-ink); }
+  .last { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; color: var(--ink); background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+</style>
+</head>
+<body>
+<h1>Button Check</h1>
+<p>Press the console's buttons. Each one types a key into the game, and its box lights up here. A game can have its own keys: in the library, Game › Properties….</p>
+<div class="grid" id="grid"></div>
+<div class="last" id="last">No key yet. Press a button.</div>
+<script>
+// Button Check: a sample page for the Mooncart demo that shows which key each console button
+// types into a game (Mooncart's standard keys), and the last key the game received.
+(function () {
+  'use strict';
+  var buttons = [
+    ['Up', 'ArrowUp', 'ArrowUp'], ['Down', 'ArrowDown', 'ArrowDown'], ['Left', 'ArrowLeft', 'ArrowLeft'], ['Right', 'ArrowRight', 'ArrowRight'],
+    ['A', 'Enter', 'Enter'], ['B', 'Escape', 'Escape'], ['START', 'M', 'KeyM'], ['SELECT', 'H', 'KeyH']
+  ];
+  var grid = document.getElementById('grid'), last = document.getElementById('last');
+  var rows = {};
+  buttons.forEach(function (b) {
+    var row = document.createElement('div');
+    row.className = 'b';
+    row.innerHTML = '<b></b><span></span>';
+    row.firstChild.textContent = b[0];
+    row.lastChild.textContent = b[1];
+    grid.appendChild(row);
+    rows[b[2]] = row;
+  });
+  function find(e) { return rows[e.code] || rows[e.key] || null; }
+  addEventListener('keydown', function (e) {
+    var row = find(e);
+    if (row) { row.classList.add('on'); e.preventDefault(); }
+    last.textContent = 'Last key: ' + (e.key === ' ' ? 'Space' : e.key) + '   (code ' + (e.code || '?') + ')';
+  });
+  addEventListener('keyup', function (e) { var row = find(e); if (row) row.classList.remove('on'); });
+})();
+</script>
+</body>
+</html>

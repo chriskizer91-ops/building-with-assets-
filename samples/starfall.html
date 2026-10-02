@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfall</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05040c; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="screen" aria-label="Starfall"></canvas>
+<script>
+// Starfall: a small sample game for the Mooncart demo, one file like every Mooncart game.
+// Left and right (the d-pad, the arrow keys, or touching either half of the screen) move the
+// cart. Catch stars, dodge rocks. A (Enter) starts, B (Escape) or START (M) pauses. The best
+// score is kept in localStorage, so it also shows Mooncart keeping each game's saves.
+(function () {
+  'use strict';
+  var W = 160, H = 120; // the game's own pixels, scaled up by a whole number to fit the screen
+  var cv = document.getElementById('screen'), g = cv.getContext('2d');
+  var z = 1, ox = 0, oy = 0;
+  function fit() {
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(innerWidth * dpr));
+    cv.height = Math.max(1, Math.round(innerHeight * dpr));
+    z = Math.max(1, Math.floor(Math.min(cv.width / W, cv.height / H)));
+    ox = Math.floor((cv.width - W * z) / 2);
+    oy = Math.floor((cv.height - H * z) / 2);
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  function px(x, y, w, h, c) { g.fillStyle = c; g.fillRect(ox + Math.round(x) * z, oy + Math.round(y) * z, w * z, h * z); }
+  function text(s, x, y, size, c, align) {
+    g.fillStyle = c;
+    g.font = 'bold ' + Math.round(size * z) + 'px ui-monospace, Menlo, Consolas, monospace';
+    g.textAlign = align || 'center';
+    g.textBaseline = 'middle';
+    g.fillText(s, ox + x * z, oy + y * z);
+  }
+
+  var best = 0;
+  try { best = Number(localStorage.getItem('best')) || 0; } catch (e) { /* no storage here */ }
+  function keepBest() { try { localStorage.setItem('best', String(best)); } catch (e) { /* no storage here */ } }
+
+  var sky = [];
+  for (var i = 0; i < 46; i++) sky.push({ x: Math.floor(Math.random() * W), y: Math.floor(Math.random() * 100), t: Math.random() * 7 });
+
+  var state = 'title', score = 0, newBest = false, cart, things, spawn, time, glow = 0;
+  var keys = {}, touchDir = 0;
+  function reset() { cart = { x: W / 2 - 6 }; things = []; spawn = 0.4; time = 0; score = 0; }
+  reset();
+
+  // two tiny sounds, once the player has pressed something
+  var ac = null;
+  function beep(freq, dur, type, vol) {
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      var o = ac.createOscillator(), v = ac.createGain(), t = ac.currentTime;
+      o.type = type || 'square';
+      o.frequency.setValueAtTime(freq, t);
+      v.gain.setValueAtTime(vol || 0.05, t);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(v); v.connect(ac.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (e) { /* no sound here */ }
+  }
+
+  function start() { reset(); state = 'play'; beep(660, 0.12, 'square', 0.04); }
+  function pause() { if (state === 'play') { state = 'pause'; beep(330, 0.08, 'square', 0.03); } }
+  function resume() { if (state === 'pause') { state = 'play'; beep(520, 0.08, 'square', 0.03); } }
+  function over() {
+    state = 'over';
+    newBest = score > best;
+    if (newBest) { best = score; keepBest(); }
+    beep(150, 0.4, 'sawtooth', 0.05);
+  }
+
+  addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { keys[k] = true; e.preventDefault(); return; }
+    if (k === 'Enter' || k === ' ' || k === 'z' || k === 'Z') {
+      e.preventDefault();
+      if (state === 'title' || state === 'over') start(); else if (state === 'pause') resume();
+    } else if (k === 'Escape' || k === 'm' || k === 'M' || k === 'p' || k === 'P') {
+      if (state === 'play') pause(); else if (state === 'pause') resume();
+    }
+  });
+  addEventListener('keyup', function (e) { keys[e.key] = false; });
+  function touch(e) {
+    e.preventDefault();
+    var t = e.touches[0];
+    touchDir = t ? (t.clientX < innerWidth / 2 ? -1 : 1) : 0;
+  }
+  cv.addEventListener('touchstart', function (e) {
+    if (state === 'title' || state === 'over') start(); else if (state === 'pause') resume();
+    touch(e);
+  }, { passive: false });
+  cv.addEventListener('touchmove', touch, { passive: false });
+  cv.addEventListener('touchend', touch, { passive: false });
+  cv.addEventListener('mousedown', function () { if (state === 'title' || state === 'over') start(); else if (state === 'pause') resume(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
+
+  function update(dt) {
+    if (state !== 'play') return;
+    time += dt;
+    var dir = (keys.ArrowLeft ? -1 : 0) + (keys.ArrowRight ? 1 : 0) + touchDir;
+    dir = Math.max(-1, Math.min(1, dir));
+    cart.x = Math.max(1, Math.min(W - 15, cart.x + dir * 100 * dt));
+    spawn -= dt;
+    if (spawn <= 0) {
+      var rock = Math.random() < Math.min(0.42, 0.14 + time / 140);
+      things.push({ x: 3 + Math.random() * (W - 11), y: -6, v: 26 + Math.random() * 16 + time * 0.8, rock: rock, t: Math.random() * 6 });
+      spawn = Math.max(0.26, 0.85 - time / 80);
+    }
+    for (var i = things.length - 1; i >= 0; i--) {
+      var t = things[i];
+      t.y += t.v * dt;
+      // the cart's tray is 14 pixels wide, its top at y 101
+      if (t.y + 5 >= 101 && t.y <= 106 && t.x + 5 >= cart.x && t.x <= cart.x + 14) {
+        things.splice(i, 1);
+        if (t.rock) { over(); return; }
+        score++;
+        glow = 0.18;
+        beep(880 + (score % 5) * 110, 0.09, 'triangle', 0.07);
+        continue;
+      }
+      if (t.y > H) things.splice(i, 1);
+    }
+    glow = Math.max(0, glow - dt);
+  }
+
+  function star(x, y, now, t) {
+    var c = Math.sin(now / 120 + t) > 0 ? '#ffe680' : '#f6c64b';
+    px(x + 2, y, 1, 5, c); px(x, y + 2, 5, 1, c); px(x + 1, y + 1, 3, 3, c); px(x + 2, y + 2, 1, 1, '#fff7d0');
+  }
+  function rock(x, y) {
+    px(x + 1, y, 3, 5, '#6b5a4a'); px(x, y + 1, 5, 3, '#6b5a4a'); px(x + 1, y + 1, 2, 1, '#8c7a66'); px(x + 3, y + 3, 1, 1, '#3e3229');
+  }
+  function drawCart(x) {
+    var y = 101;
+    px(x, y, 14, 1, '#9b8fd9');
+    px(x + 1, y + 1, 12, 4, glow > 0 ? '#ffe680' : '#7a6cc4');
+    px(x + 2, y + 2, 10, 1, glow > 0 ? '#fff3b8' : '#9488d6');
+    px(x + 2, y + 5, 3, 3, '#2a2350'); px(x + 9, y + 5, 3, 3, '#2a2350');
+    px(x + 3, y + 6, 1, 1, '#c9c1f0'); px(x + 10, y + 6, 1, 1, '#c9c1f0');
+  }
+  // a crescent: the pixels of one disc that the other, shifted, doesn't cover
+  function moon(cx, cy, r) {
+    for (var y = -r; y <= r; y++) {
+      for (var x = -r; x <= r; x++) {
+        var dx = x - 3, dy = y + 2;
+        if (x * x + y * y <= r * r + r * 0.6 && dx * dx + dy * dy > r * r) px(cx + x, cy + y, 1, 1, '#f2e3a8');
+      }
+    }
+  }
+  function panel() { g.fillStyle = 'rgba(8, 6, 20, 0.74)'; g.fillRect(ox, oy, W * z, H * z); }
+
+  function draw(now) {
+    g.fillStyle = '#05040c';
+    g.fillRect(0, 0, cv.width, cv.height);
+    px(0, 0, W, H, '#15122d');
+    for (var i = 0; i < sky.length; i++) {
+      var s = sky[i];
+      px(s.x, s.y, 1, 1, Math.sin(now / 700 + s.t) > -0.2 ? '#8a80c6' : '#3a3470');
+    }
+    moon(143, 15, 6);
+    px(0, 109, W, 11, '#2a2350');
+    for (var x = 0; x < W; x += 8) px(x + ((x / 8) % 2) * 3, 110, 3, 1, '#3e3577');
+    for (i = 0; i < things.length; i++) {
+      var t = things[i];
+      if (t.rock) rock(t.x, t.y); else star(t.x, t.y, now, t.t);
+    }
+    drawCart(cart.x);
+    text(String(score), 5, 8, 9, '#ffe680', 'left');
+    text('BEST ' + best, 5, 18, 5, '#8a80c6', 'left');
+    if (state === 'title') {
+      panel();
+      text('STARFALL', W / 2, 38, 15, '#ffe680');
+      text('catch stars, dodge rocks', W / 2, 56, 5.5, '#d6d0f5');
+      text('A to start', W / 2, 74, 7.5, '#ffffff');
+      text('d-pad or touch to move', W / 2, 88, 5, '#8a80c6');
+    } else if (state === 'pause') {
+      panel();
+      text('PAUSED', W / 2, 52, 12, '#ffffff');
+      text('A to go on', W / 2, 70, 6, '#d6d0f5');
+    } else if (state === 'over') {
+      panel();
+      text(newBest ? 'NEW BEST!' : 'GAME OVER', W / 2, 40, 12, newBest ? '#ffe680' : '#ffffff');
+      text(score + (score === 1 ? ' star' : ' stars'), W / 2, 58, 8, '#d6d0f5');
+      text('A to play again', W / 2, 78, 6.5, '#ffffff');
+    }
+  }
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,9 @@
 //   1. when a game saves a file it made (an export, a character sheet), it hands the file to
 //      the console, which asks where to keep it on the phone;
 //   2. reads, restores or clears this game's saved data for the save manager and backups;
-//   3. in the desktop test harness only, types the console's button presses into the game.
+//   3. in a desktop or plain web browser only, types the console's button presses into the game.
+// In a plain web browser every game shares one address, so it also gives this game's saved
+// data its own corner of the browser's storage (window.__mooncartSlot, set just before it).
 // Games can check `window.__mooncart` to know they're running on the console.
 (function () {
   if (window.__mooncart) return;
@@ -12,6 +14,65 @@
   function post(msg) {
     msg.mooncart = 1;
     try { P.postMessage(msg, '*'); } catch (e) { /* no parent */ }
+  }
+
+  // 0. a plain web browser: localStorage, sessionStorage and IndexedDB names get a prefix
+  //    made from the game's save slot, before the game's own scripts run
+  var slot = window.__mooncartSlot;
+  if (slot && typeof Proxy === 'function') {
+    var prefix = 'mc:' + slot + ':';
+    var wrap = function (real) {
+      var own = function () {
+        var out = [];
+        for (var i = 0; i < real.length; i++) { var k = real.key(i); if (k != null && k.indexOf(prefix) === 0) out.push(k.slice(prefix.length)); }
+        return out;
+      };
+      var api = {
+        getItem: function (k) { return real.getItem(prefix + k); },
+        setItem: function (k, v) { real.setItem(prefix + k, String(v)); },
+        removeItem: function (k) { real.removeItem(prefix + k); },
+        clear: function () { own().forEach(function (k) { real.removeItem(prefix + k); }); },
+        key: function (i) { var o = own(); return i >= 0 && i < o.length ? o[i] : null; }
+      };
+      Object.defineProperty(api, 'length', { configurable: true, get: function () { return own().length; } });
+      return new Proxy(api, {
+        get: function (t, p) { if (typeof p === 'symbol' || p in t) return t[p]; var v = real.getItem(prefix + p); return v === null ? undefined : v; },
+        set: function (t, p, v) { if (typeof p === 'symbol' || p in t) return false; real.setItem(prefix + p, String(v)); return true; },
+        has: function (t, p) { return p in t || (typeof p === 'string' && real.getItem(prefix + p) !== null); },
+        deleteProperty: function (t, p) { if (typeof p === 'string' && !(p in t)) real.removeItem(prefix + p); return true; },
+        ownKeys: function () { return own(); },
+        getOwnPropertyDescriptor: function (t, p) {
+          if (typeof p !== 'string' || p in t) return undefined;
+          var v = real.getItem(prefix + p);
+          return v === null ? undefined : { value: v, writable: true, enumerable: true, configurable: true };
+        }
+      });
+    };
+    ['localStorage', 'sessionStorage'].forEach(function (name) {
+      try {
+        var store = wrap(window[name]);
+        Object.defineProperty(window, name, { configurable: true, enumerable: true, get: function () { return store; } });
+      } catch (e) { /* this browser keeps no storage here */ }
+    });
+    try {
+      var F = window.IDBFactory && window.IDBFactory.prototype;
+      if (F) {
+        var open = F.open, del = F.deleteDatabase, list = F.databases;
+        F.open = function (name, v) { return v === undefined ? open.call(this, prefix + name) : open.call(this, prefix + name, v); };
+        F.deleteDatabase = function (name) { return del.call(this, prefix + name); };
+        if (list) {
+          F.databases = function () {
+            return list.call(this).then(function (l) {
+              return l.filter(function (d) { return d.name.indexOf(prefix) === 0; }).map(function (d) { return { name: d.name.slice(prefix.length), version: d.version }; });
+            });
+          };
+        }
+      }
+    } catch (e) { /* no IndexedDB */ }
+  }
+  // the demo page's frame swallows alert() boxes; the console shows them instead
+  if (window.__mooncartDemo && P !== window) {
+    window.alert = function (msg) { post({ op: 'alert', text: String(msg) }); };
   }
 
   // 1. files a game "downloads"
@@ -41,7 +102,7 @@
     }, true);
   }
 
-  // 3. keys (desktop test harness)
+  // 3. keys (desktop or plain web browser)
   var KEYS = {
     ArrowUp: ['ArrowUp', 38], ArrowDown: ['ArrowDown', 40], ArrowLeft: ['ArrowLeft', 37], ArrowRight: ['ArrowRight', 39],
     Enter: ['Enter', 13], Space: [' ', 32], Escape: ['Escape', 27], Backspace: ['Backspace', 8], Tab: ['Tab', 9], ShiftLeft: ['Shift', 16]

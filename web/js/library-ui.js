@@ -112,8 +112,8 @@ export class LibraryView {
           { label: 'Add a folder of games…', action: () => this.addFolder() },
           { label: 'New folder', accel: 'Ctrl+Shift+N', action: () => this.newFolder() },
           { sep: true },
-          { label: 'Back up everything…', action: () => this.backup() },
-          { label: 'Restore from a backup…', action: () => this.restore() },
+          { label: 'Back up everything…', disabled: native.platform === 'web', action: () => this.backup() },
+          { label: 'Restore from a backup…', disabled: native.platform === 'web', action: () => this.restore() },
           { label: 'Save a copy of Mooncart…', disabled: native.platform !== 'android', action: () => this.saveApk() },
           { sep: true },
           { label: 'Close menu', accel: 'Esc', action: () => this.close() },
@@ -136,7 +136,7 @@ export class LibraryView {
           { label: 'Properties…', accel: 'Alt+Enter', disabled: !one, action: () => this.properties() },
           { sep: true },
           { label: 'Replace with a newer file…', disabled: !game, action: () => this.replaceFile(game) },
-          { label: 'Make it work offline', disabled: !game || !game.src.startsWith('user:'), action: () => this.packGame(game, true) },
+          { label: 'Make it work offline', disabled: !game || !game.src.startsWith('user:') || native.platform === 'web', action: () => this.packGame(game, true) },
           { sep: true },
           { label: 'Export saves…', disabled: !game, action: () => this.exportSave(game) },
           { label: 'Import saves…', disabled: !game, action: () => this.importSave(game) },
@@ -462,7 +462,7 @@ export class LibraryView {
   }
 
   async packGame(g, loud) {
-    if (!g || !g.src.startsWith('user:')) return;
+    if (!g || !g.src.startsWith('user:') || native.platform === 'web') return;
     if (g.size > 25 * 1048576) { if (loud) alertBox('Make it work offline', 'This game is big enough that it almost certainly has everything inside it already.'); return; }
     let html;
     try { html = await (await fetch(native.rawUrl(g.src))).text(); } catch { return; }
@@ -549,6 +549,7 @@ export class LibraryView {
       const file = { app: 'mooncart', kind: 'saves', saveKey: g.saveKey, game: g.name, exportedAt: new Date().toISOString(), local: d.local };
       const ok = await native.saveFile(`${g.saveKey}-saves.json`, 'application/json', JSON.stringify(file, null, 1));
       if (ok) toast('Saves exported');
+      else if (native.demo) toast('The demo page can’t save files. The Mooncart app can.');
     } catch (e) { alertBox('Export saves', 'Could not read the saves: ' + e.message); }
   }
 
@@ -745,6 +746,12 @@ export class LibraryView {
   }
 
   longevityHelp() {
+    if (native.platform === 'web') {
+      return alertBox('Keeping your games for years',
+        'This is Mooncart in a web browser. The games you add and their saved progress stay in this browser, on this computer. It needs no internet.\n\n' +
+        '1. Keep your game files too. Clearing this browser\'s data for the page, or using another browser, starts Mooncart empty.\n\n' +
+        '2. For a phone that keeps everything for years, use the Mooncart app: it has the same console, a backup file, and a copy of its own installer.');
+    }
     return alertBox('Keeping your games for years',
       'Mooncart never uses the internet. Everything it needs is inside the app, and your games and saves stay on the phone, so airplane mode is fine forever.\n\n' +
       '1. Keep a copy of the installer: File › Save a copy of Mooncart… writes it to a memory card or to Downloads. That file can reinstall Mooncart on this phone or another Android phone, with no internet.\n\n' +
@@ -756,7 +763,7 @@ export class LibraryView {
   about() {
     return native.info().then((i) => alertBox('About Mooncart',
       `Mooncart ${this.version}\nA retro console for single-file HTML games.\n\n` +
-      `Running on: ${i.platform === 'android' ? `Android ${i.android || ''}${i.model ? ' (' + i.model + ')' : ''}` : 'a desktop browser (test mode)'}\n` +
+      `Running on: ${i.platform === 'android' ? `Android ${i.android || ''}${i.model ? ' (' + i.model + ')' : ''}` : i.platform === 'web' ? (i.demo ? 'the demo page, in a web browser' : 'a web browser') : 'a desktop browser (test mode)'}\n` +
       (i.webview ? `Web engine: ${i.webview}\n` : '') +
       `\nFonts: Pixelify Sans and Jacquard 12, under the SIL Open Font License.`));
   }

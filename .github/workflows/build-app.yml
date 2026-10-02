@@ -5,7 +5,7 @@ name: Build the Mooncart app
 
 on:
   push:
-    paths: ['web/**', 'android/**', 'tools/**', 'games.json', 'package.json', '.github/workflows/build-app.yml']
+    paths: ['web/**', 'android/**', 'tools/**', 'samples/**', 'games.json', 'package.json', 'package-lock.json', '.github/workflows/build-app.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -54,11 +54,20 @@ jobs:
           MOONCART_KEYSTORE_PASS: ${{ secrets.MOONCART_KEYSTORE_PASS }}
           MOONCART_KEY_ALIAS: ${{ secrets.MOONCART_KEY_ALIAS }}
           MOONCART_KEY_PASS: ${{ secrets.MOONCART_KEY_PASS }}
+      - name: Build Mooncart.html (the console as one page, for a laptop's web browser)
+        run: |
+          npm ci
+          node tools/build-demo.mjs --standalone
       - uses: actions/upload-artifact@v4
         with:
           name: Mooncart-app
           path: build/android/Mooncart-*.apk
           compression-level: 0
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mooncart-web
+          path: build/web/Mooncart.html
           retention-days: 90
       - uses: actions/upload-artifact@v4
         with:
@@ -111,6 +120,10 @@ jobs:
           path: apk
       - uses: actions/download-artifact@v4
         with:
+          name: Mooncart-web
+          path: web
+      - uses: actions/download-artifact@v4
+        with:
           name: game-list
           path: list
       - uses: actions/download-artifact@v4
@@ -139,6 +152,8 @@ jobs:
             s += "2. Open it. If Android asks, allow your browser (or Files app) to install unknown apps.\n";
             s += "3. Open Mooncart. Everything is inside, so it works in airplane mode from then on.\n\n";
             s += "Keep a copy of the .apk on a memory card or a computer: it reinstalls Mooncart on any Android 7 or newer phone, no internet needed.\n\n";
+            s += "## On a laptop\n\n";
+            s += "Download **Mooncart.html** below and open it in Chrome or Edge. Add your games with MENU › File › Add games…; they stay in that browser on that laptop. It needs no internet.\n\n";
             s += "The android-* pictures below show this exact build on an Android 14 emulator set up like a cheap phone (a 720 x 1600 screen), in airplane mode.\n\n";
             s += "## Games inside (" + c.games.length + ")\n\n";
             for (const [f, gs] of Object.entries(byFolder)) {
@@ -159,5 +174,6 @@ jobs:
           body_path: notes.md
           files: |
             apk/Mooncart-*.apk
+            web/Mooncart.html
             phone-test/screens/*
           make_latest: true

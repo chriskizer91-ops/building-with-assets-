@@ -3,8 +3,9 @@
 ## What this is
 
 Mooncart: a retro handheld console for Android phones that plays single-file HTML games, with
-Chris's games built in, made to keep working offline for decades. `README.md` is for Chris;
-`docs/how-it-works.md` is for whoever works on it next.
+Chris's games built in, made to keep working offline for decades. The same console also runs in a
+web browser (`Mooncart.html` for laptops, and a demo page), where people add their own games.
+`README.md` is for Chris; `docs/how-it-works.md` is for whoever works on it next.
 
 ## Rules
 
@@ -26,4 +27,7 @@ node tools/dev-server.mjs --data /tmp/mc &    # fresh data folder
 node tools/smoke.mjs                          # must end with "all good"
 ```
 
-The GitHub workflow builds the APK and runs `tools/phone-test.sh` on an emulator; look at its screenshots.
+For the browser version (the demo artifact and `Mooncart.html`): `node tools/web-smoke.mjs` (needs `npm install`),
+also ending with "all good".
+
+The GitHub workflow builds the APK and `Mooncart.html`, and runs `tools/phone-test.sh` on an emulator; look at its screenshots.

@@ -3,8 +3,9 @@
 # Mooncart
 
 A retro handheld console for Android phones that plays single-file HTML games. Your games are
-already inside it. It never uses the internet, so a cheap Android phone in airplane mode can
-keep playing them for as long as the phone works.
+already inside it, and you can add more. It never uses the internet, so a cheap Android phone in
+airplane mode can keep playing them for as long as the phone works. The same console also runs
+on a laptop, as one file you open in a web browser.
 
 ![Mooncart's game list](docs/screenshots/console-game-list.jpg)
 
@@ -19,6 +20,21 @@ keep playing them for as long as the phone works.
 
 It runs on Android 7.0 or newer. A $50 phone is fine. Very large games (the 35 MB Witch Way
 version) take a few seconds to start on a slow phone.
+
+To add your own games on the phone: **MENU › File › Add games…**. To take out a built-in game you
+don't want: pick it in the library, then **Edit › Remove…**.
+
+## On a laptop
+
+1. From **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**,
+   download **Mooncart.html** (about half a megabyte).
+2. Open it. It opens in your web browser; Chrome or Edge work best.
+3. Add your games: **MENU › File › Add games…** (or *Add a folder of games…*).
+
+It's the same console, with two small sample games in it (Starfall and Button Check). The games you
+add and their saved progress stay in that browser on that laptop, and it needs no internet. Keep
+your game files too: clearing the browser's data, or opening Mooncart.html in a different browser,
+starts it empty again. Backups and *Save a copy of Mooncart* are only in the phone app.
 
 ## Playing
 
@@ -101,9 +117,12 @@ over the old one keeps your saves.
 web/            the console: plain HTML, CSS and JavaScript modules, no build step
 android/        the Android app (Java, no libraries) and build.sh (aapt2, javac, d8, apksigner; no Gradle)
 games.json      which games go inside
+samples/        the two small sample games of the browser version
 tools/          collect-games.mjs  gather and pack the games into build/collection/
                 dev-server.mjs     run the console in a desktop browser, standing in for the phone
                 smoke.mjs          play through it in Chromium and check it (Playwright)
+                build-demo.mjs     the browser version: the demo page, or Mooncart.html (--standalone)
+                web-smoke.mjs      check the browser version in Chromium
                 phone-test.sh      install on an emulator or phone with adb and play some games
                 make-icons.mjs     draw the app icon
 ```
@@ -114,6 +133,7 @@ Run it on a computer:
 node tools/collect-games.mjs --local ..      # games from checkouts next to this one (or no flag: clone from GitHub)
 node tools/dev-server.mjs                    # then open http://localhost:8090
 node tools/smoke.mjs                         # with the server running
+npm install && node tools/web-smoke.mjs      # the browser version
 bash android/build.sh                        # needs the Android SDK (platform 35)
 ```
 

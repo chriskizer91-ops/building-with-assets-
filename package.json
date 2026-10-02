@@ -12,5 +12,8 @@
     "icons": "node tools/make-icons.mjs",
     "smoke": "node tools/smoke.mjs",
     "apk": "bash android/build.sh"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

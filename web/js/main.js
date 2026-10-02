@@ -224,6 +224,10 @@ async function start() {
   picker.show(folder && library.exists(folder) ? folder : library.root);
   document.body.classList.add('ready');
   console.info(`[mooncart] ready: ${library.games().length} games`);
+  if (native.platform === 'web' && !settings.get('addTipShown')) {
+    toast((native.demo ? 'This is the Mooncart demo. ' : '') + 'Add your own games: MENU › File › Add games…', 9000);
+    settings.set({ addTipShown: true });
+  }
 }
 
 addEventListener('error', (e) => console.error('Mooncart error:', e.message, e.filename, e.lineno));
