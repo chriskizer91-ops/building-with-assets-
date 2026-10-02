@@ -70,11 +70,11 @@ function hug(L, AW, AH, shadow) {
 }
 
 function sideLayout(body, aspect, touch) {
-  const ctl = Math.round(clamp(body.h * (touch ? 0.36 : 0.26), 30, 70));
-  const btnD = Math.round(clamp(ctl * 0.44, 11, 30));
-  const pairW = btnD * 2 + Math.round(btnD * 0.3);
-  const wing = Math.max(ctl, pairW) + Math.round(ctl * 0.34);
-  const top = 11, bottom = 18;
+  const ctl = Math.round(clamp(body.h * (touch ? 0.34 : 0.26), 30, 70));
+  const btnD = Math.round(clamp(ctl * 0.41, 11, 30));
+  const pairW = btnD * 2 + Math.round(btnD * 0.25);
+  const wing = Math.max(ctl, pairW) + Math.round(ctl * 0.22);
+  const top = 10, bottom = 16;
   const bpx = 4, bpt = 9, bpb = 4;
   const regionW = body.w - 2 * wing, regionH = body.h - top - bottom;
   let sw = regionW - 2 * bpx, sh = regionH - bpt - bpb;
@@ -114,7 +114,7 @@ function sideLayout(body, aspect, touch) {
   if (body.y + body.h - spH - 7 > pillY + pillH + 9) {
     L.speaker = { x: body.x + body.w - spW - L.body.r - 3, y: body.y + body.h - spH - 7, w: spW, h: spH };
   }
-  L.logo = { x: bezel.x, y: bezel.y + bezel.h + 5, w: bezel.w };
+  L.logo = { x: bezel.x, y: bezel.y + bezel.h + 4, w: bezel.w };
   L.slot = slotFor(bezel, body);
   L.led = { x: body.x + Math.max(8, L.body.r + 2), y: body.y + 4 };
   return L;
