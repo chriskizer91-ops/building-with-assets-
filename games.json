@@ -1,0 +1,35 @@
+{
+  "about": "The games built into Mooncart. tools/collect-games.mjs downloads each source repository, runs its build when it has one, packs anything the pages load from the internet into the pages themselves, and writes the result to build/collection/ for the app. Edit this list to change what ships inside the app. 'folder' is where the game appears in the library; 'name' overrides the game's own title; 'saveKey' picks its save slot (games with the same slot share saved progress); 'opts' sets how it plays at first (e.g. frame: false to hide the console round a game that draws its own). A source's 'paths' fetches only those files; 'build' runs that command in it first.",
+  "sources": {
+    "map": { "repo": "chriskizer91-ops/what_the_map_forgot", "paths": ["/what-the-map-forgot.html"] },
+    "witchway": { "repo": "chriskizer91-ops/follow-me-down-witch-way", "build": ["python3", "tools/build_single.py"] },
+    "aether": { "repo": "chriskizer91-ops/20-min", "paths": ["/dist/*.html"] },
+    "aethermoor": { "repo": "chriskizer91-ops/New-game", "paths": ["/*.html"] },
+    "envoi": { "repo": "chriskizer91-ops/envoi-on-the-longest-night", "build": ["node", "tools/build.mjs"] }
+  },
+  "games": [
+    { "source": "map", "file": "what-the-map-forgot.html", "folder": "", "opts": { "frame": false } },
+
+    { "source": "witchway", "file": "dist/Follow_Me_Down_Witch_Way.html", "folder": "Follow Me Down Witch Way", "saveKey": "follow-me-down-witch-way" },
+    { "source": "witchway", "file": "materials/Witch-Way-Bundle/Game/Witch_Way_-_Path_Polish_-_2026-09-27.html", "folder": "Follow Me Down Witch Way/Earlier versions", "name": "Witch Way: Path Polish (27 Sept)", "saveKey": "witch-way-path-polish" },
+    { "source": "witchway", "file": "materials/Follow_Me_Down_Witch_Way.html", "folder": "Follow Me Down Witch Way/Earlier versions", "name": "Witch Way: first version", "saveKey": "witch-way-first-version" },
+
+    { "source": "aether", "file": "dist/title.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/wickhollow.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/wickhollow-square.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/gloamwood.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/bogmire.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/airship.html", "folder": "Moonlight in the Aether", "saveKey": "moonlight-the-magpie" },
+    { "source": "aether", "file": "dist/brewing.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/swap-shop.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/hollow-battle.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/bestiary.html", "folder": "Moonlight in the Aether" },
+    { "source": "aether", "file": "dist/witch-up-close.html", "folder": "Moonlight in the Aether" },
+
+    { "source": "aethermoor", "file": "aethermoor-interactive-image-map-polished.html", "folder": "Aethermoor" },
+    { "source": "aethermoor", "file": "aethermoor-character-sheet-4.html", "folder": "Aethermoor" },
+
+    { "source": "envoi", "file": "dist/*.html", "exclude": "*.artifact.html", "folder": "Envoi on the Longest Night" },
+    { "source": "envoi", "file": "reference/demos/*.html", "folder": "Envoi on the Longest Night/Reference demos", "saveKeyPrefix": "envoi-ref-" }
+  ]
+}

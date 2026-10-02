@@ -1,0 +1,16 @@
+{
+  "name": "mooncart",
+  "productName": "Mooncart",
+  "version": "0.1.0",
+  "description": "A retro game console for single-file HTML games, for Android phones. Works offline.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "collect": "node tools/collect-games.mjs",
+    "collect:local": "node tools/collect-games.mjs --local ..",
+    "dev": "node tools/dev-server.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "apk": "bash android/build.sh"
+  }
+}

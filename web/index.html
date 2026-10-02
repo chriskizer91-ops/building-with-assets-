@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0a16">
+<title>Mooncart</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<canvas id="art" aria-hidden="true"></canvas>
+<main id="screen" aria-label="Game screen">
+  <div id="stage"></div>
+  <div id="select" class="layer" hidden></div>
+  <div id="loading" class="layer" hidden></div>
+  <div id="overlay" class="layer" hidden></div>
+  <div id="boot" class="layer" hidden></div>
+  <div id="flash" aria-hidden="true"></div>
+</main>
+<div id="pads" aria-hidden="true"></div>
+<div id="library" class="library" hidden></div>
+<div id="modal-root"></div>
+<div id="toast" role="status" hidden></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+# Builds the Mooncart Android app with every game from games.json inside it, tries it on an
+# Android emulator, and (on the main branch, or when run by hand with "publish") puts the
+# .apk on the Releases page, ready to download straight onto a phone.
+name: Build the Mooncart app
+
+on:
+  push:
+    paths: ['web/**', 'android/**', 'tools/**', 'games.json', 'package.json', '.github/workflows/build-app.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Put the app on the Releases page'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Android SDK parts
+        run: |
+          SDKM=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$SDKM" --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
+      - name: Collect the games (clones each game's repository and builds it)
+        run: node tools/collect-games.mjs
+      - name: Build the app
+        run: bash android/build.sh
+        env:
+          MOONCART_VERSION_CODE: ${{ github.run_number }}
+          MOONCART_KEYSTORE_B64: ${{ secrets.MOONCART_KEYSTORE_B64 }}
+          MOONCART_KEYSTORE_PASS: ${{ secrets.MOONCART_KEYSTORE_PASS }}
+          MOONCART_KEY_ALIAS: ${{ secrets.MOONCART_KEY_ALIAS }}
+          MOONCART_KEY_PASS: ${{ secrets.MOONCART_KEY_PASS }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mooncart-app
+          path: build/android/Mooncart-*.apk
+          compression-level: 0
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-list
+          path: build/collection/collection.json
+
+  phone-test:
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Mooncart-app
+          path: apk
+      - name: Let the emulator use the processor's virtualisation
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Play some games on an Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          PRINT_SHOTS: '1'
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          disk-size: 6000M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: bash tools/phone-test.sh "$(ls apk/Mooncart-*.apk | head -1)" build/phone-test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phone-test-screenshots
+          path: build/phone-test
+
+  publish:
+    needs: [apk, phone-test]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish || github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Mooncart-app
+          path: apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: game-list
+          path: list
+      - name: Write the release notes
+        run: |
+          node -e '
+            const c = require("./list/collection.json");
+            const mb = (n) => (n / 1048576).toFixed(1) + " MB";
+            const byFolder = {};
+            for (const g of c.games) (byFolder[g.folder || "(top of the library)"] ||= []).push(g);
+            let s = "## Install on an Android phone\n\n";
+            s += "1. On the phone, tap **Mooncart-${{ needs.apk.outputs.version }}.apk** below to download it.\n";
+            s += "2. Open it. If Android asks, allow your browser (or Files app) to install unknown apps.\n";
+            s += "3. Open Mooncart. Everything is inside, so it works in airplane mode from then on.\n\n";
+            s += "Keep a copy of the .apk on a memory card or a computer: it reinstalls Mooncart on any Android 7 or newer phone, no internet needed.\n\n";
+            s += "## Games inside (" + c.games.length + ")\n\n";
+            for (const [f, gs] of Object.entries(byFolder)) {
+              s += "**" + f + "**\n";
+              for (const g of gs) s += "- " + g.name + " (" + mb(g.size) + ")\n";
+              s += "\n";
+            }
+            s += "Collected " + c.version.slice(0, 16).replace("T", " ") + " UTC from: " + c.sources.map((x) => x.repo + " @ " + x.commit.slice(0, 7)).join(", ") + "\n";
+            require("fs").writeFileSync("notes.md", s);
+          '
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.apk.outputs.version }}-build${{ github.run_number }}
+          name: Mooncart ${{ needs.apk.outputs.version }} (build ${{ github.run_number }})
+          body_path: notes.md
+          files: apk/Mooncart-*.apk
+          make_latest: true
