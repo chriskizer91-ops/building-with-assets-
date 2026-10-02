@@ -13,7 +13,7 @@ keep playing them for as long as the phone works.
 ## Put it on a phone
 
 1. On the Android phone, open **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**.
-2. Tap **Mooncart-….apk** to download it (60 to 130 MB, depending on which games are inside).
+2. Tap **Mooncart-….apk** to download it (about 40 MB; about 100 MB once the two private games are built in, see below).
 3. Open the download. Android asks whether your browser may install apps: allow it, then tap **Install**.
 4. Open **Mooncart**. From now on you can turn on airplane mode.
 
