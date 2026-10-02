@@ -13,7 +13,7 @@ keep playing them for as long as the phone works.
 ## Put it on a phone
 
 1. On the Android phone, open **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**.
-2. Tap **Mooncart-….apk** to download it (about 120 MB).
+2. Tap **Mooncart-….apk** to download it (60 to 130 MB, depending on which games are inside).
 3. Open the download. Android asks whether your browser may install apps: allow it, then tap **Install**.
 4. Open **Mooncart**. From now on you can turn on airplane mode.
 
@@ -74,6 +74,21 @@ slot named after its title. A newer version of a game with the same title picks 
 The built-in games are listed in [`games.json`](games.json): What the Map Forgot, Follow Me Down Witch Way
 (the latest build plus two earlier versions), the eleven Moonlight in the Aether demos, the Aethermoor map and
 character ledger, and the Envoi on the Longest Night model pages and reference demos. 31 games, about 150 MB.
+
+**Games from private repositories.** What the Map Forgot and Follow Me Down Witch Way live in private
+repositories, and this one is public. The build can only include them if it has a key that can read them,
+and it will never put an app with private games inside on a public Releases page. To include them:
+
+1. Make this repository private (**Settings › General › Danger Zone › Change visibility**), so its Releases page is private too.
+2. Make a key: your GitHub picture › **Settings › Developer settings › Personal access tokens › Fine-grained tokens ›
+   Generate new token**. Repository access: *Only select repositories*, pick the game repositories. Permissions:
+   *Contents: Read-only*. Copy the token.
+3. In this repository: **Settings › Secrets and variables › Actions › New repository secret**, name it `GAMES_TOKEN`,
+   paste the token.
+4. **Actions › Build the Mooncart app › Run workflow.** The new `.apk` on the Releases page has all the games.
+
+Until then the app has the games from the public repositories, and you can add the other two on the phone
+with **File › Add games…**.
 
 When a game changes, run the build again: on GitHub open **Actions › Build the Mooncart app › Run workflow**.
 It fetches every game repository fresh, builds the ones that need building, packs them in, makes the app,
