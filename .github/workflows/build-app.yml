@@ -141,7 +141,9 @@ jobs:
               for (const g of gs) s += "- " + g.name + " (" + mb(g.size) + ")\n";
               s += "\n";
             }
-            s += "Collected " + c.version.slice(0, 16).replace("T", " ") + " UTC from: " + c.sources.map((x) => x.repo + " @ " + x.commit.slice(0, 7)).join(", ") + "\n";
+            const got = c.sources.filter((x) => x.ok), missed = c.sources.filter((x) => !x.ok);
+            s += "Collected " + c.version.slice(0, 16).replace("T", " ") + " UTC from: " + got.map((x) => x.repo + " @ " + x.commit.slice(0, 7)).join(", ") + ".\n";
+            if (missed.length) s += "\nNot included: " + missed.map((x) => x.repo + " (" + x.note + ")").join(", ") + ". Those games can be added on the phone with File › Add games…, or see the README to build them in.\n";
             require("fs").writeFileSync("notes.md", s);
           '
       - uses: softprops/action-gh-release@v2

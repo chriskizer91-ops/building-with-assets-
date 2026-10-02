@@ -17,12 +17,16 @@ shot() {
   sleep "${2:-0}"
   adb exec-out screencap -p > "$OUT/$1.png"
   echo "screenshot $1 ($(stat -c%s "$OUT/$1.png") bytes)"
-  if [ "${PRINT_SHOTS:-}" = 1 ] && command -v convert >/dev/null; then
-    convert "$OUT/$1.png" -resize 960x960 -quality 62 "$OUT/$1.jpg"
-    echo "=== SHOT $1"
-    base64 -w 4000 "$OUT/$1.jpg"
+}
+print_shots() {
+  [ "${PRINT_SHOTS:-}" = 1 ] && command -v convert >/dev/null || return 0
+  for f in "$@"; do
+    [ -f "$OUT/$f.png" ] || continue
+    convert "$OUT/$f.png" -resize 640x640 -quality 55 "$OUT/$f.jpg"
+    echo "=== SHOT $f"
+    base64 -w 4000 "$OUT/$f.jpg"
     echo "=== END"
-  fi
+  done
 }
 launch() {
   echo "--- launching: $1"
@@ -57,10 +61,11 @@ key KEYCODE_F1;                     shot 12-library 2
 
 echo "--- app log"
 adb logcat -d -s Mooncart:V chromium:W AndroidRuntime:E ActivityManager:W > "$OUT/logcat.txt"
-grep -v -E "^--------- beginning" "$OUT/logcat.txt" | tail -n 120
+grep -v -E "^--------- beginning|RENDER WARNING|too many errors|Too many GL errors|Slow operation|Unable to start service" "$OUT/logcat.txt" | tail -n 60
 if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then echo "!!! the app crashed"; FAIL=1; fi
 if grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | grep -v -i "favicon" >/dev/null; then
   echo "!!! page errors:"; grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | head -20
 fi
 adb shell pidof "$PKG" >/dev/null || { echo "!!! the app is not running at the end"; FAIL=1; }
+print_shots 02-game-list 04-bogmire 05-game-menu 09-sol-packed-3d 11-back-to-list 12-library
 exit $FAIL
