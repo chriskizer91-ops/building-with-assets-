@@ -66,7 +66,10 @@ CDN files from a folder (for machines that can't reach the CDN).
   address per game as on the phone) and an HTTP stand-in for the Android bridge.
 - `node tools/smoke.mjs` plays through it in Chromium at phone sizes: picking and playing games with the
   console buttons, the game menu, saves, adding, renaming, moving and removing games, backups, the upright layout.
-- The GitHub workflow (`.github/workflows/build-app.yml`) builds the APK, installs it on an Android 14 emulator,
-  plays a few games by name (`adb shell am start -n io.github.chriskizer91ops.mooncart/.MainActivity --es launch "Bogmire"`),
-  screenshots each step and checks the log (`tools/phone-test.sh`). Screenshots are uploaded as an artifact and,
-  as small JPEGs, printed into the log between `=== SHOT` and `=== END`.
+- The GitHub workflow (`.github/workflows/build-app.yml`) builds the APK and runs `tools/phone-test.sh` on an
+  Android 14 emulator given a cheap phone's screen (720 x 1600) and put in airplane mode. It starts games by their
+  save slot (`adb shell am start -n io.github.chriskizer91ops.mooncart/.MainActivity --es launch bogmire`), waits
+  for the console to log `[mooncart] loaded <slot> in <ms> ms`, screenshots each step, and checks the log for
+  crashes, page errors and pages that reach for the internet (`Server` logs those as `internet: <address>`).
+  Games that aren't in the build (the private ones) are skipped. The screenshots are uploaded as an artifact and
+  a few go on the release page.

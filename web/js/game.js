@@ -40,6 +40,7 @@ export class GameHost {
     this.secs = 0;
     this.unsaved = 0;
     this.events.emit('starting', item);
+    console.info(`[mooncart] starting ${item.saveKey}`);
     showLoading(this.loadingLayer, item.name);
     await native.register(item.saveKey, item.src);
     const query = (item.opts && item.opts.query) || '';
@@ -58,10 +59,16 @@ export class GameHost {
       hideLoading(this.loadingLayer);
       this.powerOn();
       this.focus();
-      this.events.emit('loaded', item, performance.now() - started);
+      const ms = performance.now() - started;
+      console.info(`[mooncart] loaded ${item.saveKey} in ${Math.round(ms)} ms`);
+      this.events.emit('loaded', item, ms);
     }, { once: true });
     // a very big game can take a while to read; let the player see it as soon as it draws
-    setTimeout(() => { if (this.frame === f && !this.loaded) hideLoading(this.loadingLayer); }, 25000);
+    setTimeout(() => {
+      if (this.frame !== f || this.loaded) return;
+      console.info(`[mooncart] ${item.saveKey} still loading after 25 s`);
+      hideLoading(this.loadingLayer);
+    }, 25000);
     f.src = url;
     this.frame = f;
     this.stage.replaceChildren(f);
@@ -110,7 +117,8 @@ export class GameHost {
     const it = this.item;
     if (!it) return;
     clearTimeout(this.thumbTimer);
-    if (thumb && this.secs >= 5) await this.snap();
+    // the cartridge picture never holds up quitting for long
+    if (thumb && this.secs >= 5) await Promise.race([this.snap(), new Promise((r) => setTimeout(r, 3000))]);
     this.flushTime();
     this.item = null;
     this.loaded = false;

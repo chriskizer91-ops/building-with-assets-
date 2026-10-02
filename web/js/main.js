@@ -169,10 +169,12 @@ async function start() {
     else if (name === 'restart' && game.playing) game.restart();
     else if (name === 'frame') settings.set({ frame: !settings.get('frame') });
   });
-  // start a game by its name (used by the phone test: am start ... --es launch "Bogmire")
+  // start a game by its save slot or its name (the phone test does: am start ... --es launch bogmire)
   native.on('launch', (e) => {
     const name = String((e && e.name) || '').toLowerCase();
-    const g = library.games().find((x) => x.name.toLowerCase() === name) || library.games().find((x) => x.name.toLowerCase().includes(name));
+    if (!name) return;
+    const games = library.games();
+    const g = games.find((x) => x.saveKey === name) || games.find((x) => x.name.toLowerCase() === name) || games.find((x) => x.name.toLowerCase().includes(name));
     if (!g) return toast('No game called “' + name + '”');
     if (lib.isOpen) lib.close();
     launch(g.id);
@@ -221,6 +223,7 @@ async function start() {
   const folder = settings.get('folder');
   picker.show(folder && library.exists(folder) ? folder : library.root);
   document.body.classList.add('ready');
+  console.info(`[mooncart] ready: ${library.games().length} games`);
 }
 
 addEventListener('error', (e) => console.error('Mooncart error:', e.message, e.filename, e.lineno));

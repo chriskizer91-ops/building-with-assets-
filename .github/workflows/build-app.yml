@@ -139,7 +139,7 @@ jobs:
             s += "2. Open it. If Android asks, allow your browser (or Files app) to install unknown apps.\n";
             s += "3. Open Mooncart. Everything is inside, so it works in airplane mode from then on.\n\n";
             s += "Keep a copy of the .apk on a memory card or a computer: it reinstalls Mooncart on any Android 7 or newer phone, no internet needed.\n\n";
-            s += "The android-*.jpg pictures below show this exact build running on an Android 14 phone emulator.\n\n";
+            s += "The android-* pictures below show this exact build on an Android 14 emulator set up like a cheap phone (a 720 x 1600 screen), in airplane mode.\n\n";
             s += "## Games inside (" + c.games.length + ")\n\n";
             for (const [f, gs] of Object.entries(byFolder)) {
               s += "**" + f + "**\n";

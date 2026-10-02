@@ -2,6 +2,7 @@ package io.github.chriskizer91ops.mooncart;
 
 import android.content.res.AssetManager;
 import android.net.Uri;
+import android.util.Log;
 import android.webkit.WebResourceResponse;
 
 import java.io.BufferedInputStream;
@@ -62,7 +63,11 @@ final class Server {
 
     WebResourceResponse handle(Uri u) {
         String host = u.getHost();
-        if (host == null || !"https".equals(u.getScheme())) return null;
+        String scheme = u.getScheme();
+        if (host == null || !"https".equals(scheme)) {
+            if ("http".equals(scheme)) internet(u);
+            return null;
+        }
         host = host.toLowerCase(Locale.ROOT);
         try {
             if (host.equals(HOST)) return shell(u);
@@ -70,7 +75,14 @@ final class Server {
         } catch (Exception e) {
             return text(500, "Mooncart could not open that: " + e.getMessage());
         }
+        internet(u);
         return null; // the real internet: only reached when a game asks and the phone is online
+    }
+
+    /** A game reaching for the internet works only while the phone is online; the phone test lists these. */
+    private static void internet(Uri u) {
+        String s = u.toString();
+        Log.i("Mooncart", "internet: " + (s.length() > 200 ? s.substring(0, 200) + "..." : s));
     }
 
     private static String path(Uri u) {
