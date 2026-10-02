@@ -67,5 +67,12 @@ if grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | grep -v -i "favicon" >/dev/null
   echo "!!! page errors:"; grep -E "Uncaught|ERROR " "$OUT/logcat.txt" | head -20
 fi
 adb shell pidof "$PKG" >/dev/null || { echo "!!! the app is not running at the end"; FAIL=1; }
-print_shots 02-game-list 04-bogmire 05-game-menu 09-sol-packed-3d 11-back-to-list 12-library
+# small copies of a few steps, for the release page
+if command -v convert >/dev/null; then
+  mkdir -p "$OUT/screens"
+  for f in 02-game-list 04-bogmire 05-game-menu 09-sol-packed-3d 12-library; do
+    [ -f "$OUT/$f.png" ] && convert "$OUT/$f.png" -resize 1280x1280 -quality 80 "$OUT/screens/android-$f.jpg"
+  done
+fi
+print_shots 02-game-list 04-bogmire
 exit $FAIL

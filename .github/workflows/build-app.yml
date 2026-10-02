@@ -113,6 +113,10 @@ jobs:
         with:
           name: game-list
           path: list
+      - uses: actions/download-artifact@v4
+        with:
+          name: phone-test-screenshots
+          path: phone-test
       - name: Never publish private games from a public repository
         id: guard
         run: |
@@ -135,6 +139,7 @@ jobs:
             s += "2. Open it. If Android asks, allow your browser (or Files app) to install unknown apps.\n";
             s += "3. Open Mooncart. Everything is inside, so it works in airplane mode from then on.\n\n";
             s += "Keep a copy of the .apk on a memory card or a computer: it reinstalls Mooncart on any Android 7 or newer phone, no internet needed.\n\n";
+            s += "The android-*.jpg pictures below show this exact build running on an Android 14 phone emulator.\n\n";
             s += "## Games inside (" + c.games.length + ")\n\n";
             for (const [f, gs] of Object.entries(byFolder)) {
               s += "**" + f + "**\n";
@@ -152,5 +157,7 @@ jobs:
           tag_name: v${{ needs.apk.outputs.version }}-build${{ github.run_number }}
           name: Mooncart ${{ needs.apk.outputs.version }} (build ${{ github.run_number }})
           body_path: notes.md
-          files: apk/Mooncart-*.apk
+          files: |
+            apk/Mooncart-*.apk
+            phone-test/screens/*.jpg
           make_latest: true
