@@ -430,22 +430,30 @@ await ready(page);
   const back = await state(page, () => ({ id: WalkingPaths.field().mapId, at: [WalkingPaths.field().me.x, WalkingPaths.field().me.y] }));
   check(back.id === 'world' && Math.hypot(back.at[0] - town[2][0], back.at[1] - town[2][1]) < 2, 'its way out (a map with no walk areas yet is all ground) brings her back to the town’s flag');
 
-  // how close the camera is and how fast she walks, changed while she walks
+  // how close the camera is and how fast she walks, changed while she walks (page.fill on a slider
+  // sets it as a drag would; the pointerup is the finger coming off it)
   await page.waitForTimeout(400);
+  const walkRight = async (ms) => {
+    const x0 = await state(page, () => WalkingPaths.field().me.x);
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(ms);
+    await page.keyboard.up('ArrowRight');
+    await page.waitForTimeout(300);
+    return (await state(page, () => WalkingPaths.field().me.x)) - x0;
+  };
+  const slow = await walkRight(600);
   const z0 = await state(page, () => WalkingPaths.field().cam.z);
   await page.fill('#wp-map-zoom', '2');
-  await page.dispatchEvent('#wp-map-zoom', 'input');
-  await page.dispatchEvent('#wp-map-zoom', 'change');
+  await page.dispatchEvent('#wp-map-zoom', 'pointerup');
   await page.waitForTimeout(200);
   const z1 = await state(page, () => WalkingPaths.field().cam.z);
   check(Math.abs(z1 / z0 - 2) < 0.05 && (await state(page, () => WalkingPaths.S.maps.world.zoom)) === 1.4, 'the camera slider brings the camera twice as close at once (' + z0.toFixed(2) + ' → ' + z1.toFixed(2) + ')');
   await page.fill('#wp-map-pace', '4');
-  await page.dispatchEvent('#wp-map-pace', 'input');
-  await page.dispatchEvent('#wp-map-pace', 'change');
   await page.dispatchEvent('#wp-map-pace', 'pointerup');
-  check(await state(page, () => WalkingPaths.S.maps.world.pace === 4 && WalkingPaths.field().map.pace === 4), 'and the speed slider makes her walk faster');
   await page.waitForTimeout(50);
   check(await state(page, () => document.activeElement.id !== 'wp-map-pace'), 'letting go of a slider gives the keys back to the walk');
+  const fast = await walkRight(600);
+  check(await state(page, () => WalkingPaths.S.maps.world.pace === 4 && WalkingPaths.field().map.pace === 4) && fast > slow * 1.5, 'and the speed slider makes her walk faster at once (' + Math.round(slow) + ' → ' + Math.round(fast) + ' px in the same time)');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   check(await state(page, () => !WalkingPaths.S.walking && WalkingPaths.S.cur === 'world'), 'Esc goes back to editing the world map');
@@ -467,7 +475,7 @@ await ready(page);
   await page.click('#wp-shrink-use');
   await page.waitForSelector('#wp-shrink', { state: 'hidden', timeout: 20000 }).catch(() => {});
   const shrunk = await state(page, () => { const m = WalkingPaths.S.maps.town; return { w: m.pic.w, h: m.pic.h, type: m.pic.type, size: m.size, exit: m.exits[0].rect }; });
-  check(shrunk.w === 450 && shrunk.h === 300 && shrunk.size[0] === 900 && shrunk.size[1] === 600 && shrunk.exit[0] === w.backs[0][0][1][0], 'Use this size: the town’s picture is half as wide, the map and everything on it unchanged');
+  check(shrunk.w === 450 && shrunk.h === 300 && shrunk.size[0] === 900 && shrunk.size[1] === 600 && shrunk.exit[0] === w.backs[0][0][1][0], 'Use this size: the town’s picture is half as wide, the map’s size and its way back unchanged');
   await page.keyboard.press('Control+z');
   check(await state(page, () => WalkingPaths.S.maps.town.pic.w === 900), 'and Undo puts the old picture back');
 
