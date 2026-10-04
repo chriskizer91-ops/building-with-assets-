@@ -3,11 +3,11 @@
 // along the top. Saving and opening files are in files.js.
 
 import { S, map, mapSize, remember, changed, emit, on, canUndo, canRedo } from './state.js';
-import { arrivalsInto, mapName, renameMap, keyAfterRename, resizeMap, deleteMap, wayBack, keepNow } from './project.js';
-import { pictureURL } from './pictures.js';
+import { arrivalsInto, mapName, renameMap, keyAfterRename, resizeMap, deleteMap, wayBack, keepNow, isWorld, worldIds, placeFor, makeWorld, unmakeWorld, linkPlaceTo, mapsLeadingTo, ZOOM, PACE } from './project.js';
+import { pictureURL, pictureBlob } from './pictures.js';
 import { reachNow, checkSoon, arrivalFor } from './check.js';
 import * as ed from './editor.js';
-import { $, el, plural, cap, clamp, isPt, slug } from './util.js';
+import { $, el, plural, cap, clamp, isPt, slug, sizeText } from './util.js';
 
 const TOOL_HELP = {
   select: 'Tap a shape, a point or a dot to pick it, then drag it to move it.',
@@ -18,6 +18,7 @@ const TOOL_HELP = {
   person: 'Tap where someone stands. People are in the way on a walk, and you can talk to them.',
   thing: 'Tap something to look at: a sign, a well, a chest. On a walk you can read what you write for it.',
   story: 'Drag a box where something should happen when she walks into it.',
+  place: 'Tap where a place is on the world map: a town, a cave, the end of a road. On a walk she can go into it from there.',
 };
 const HAND_HELP = 'Tap round it point by point, or trace round it with a finger. Tap the gold first point, or Finish shape, to close it.';
 const WAND_HELP = 'Tap inside it in the picture: the wand outlines the patch of the same colour round your tap.';
@@ -73,12 +74,14 @@ export function renderTools() {
     b.setAttribute('aria-pressed', b.dataset.tool === S.tool ? 'true' : 'false');
     b.disabled = !has || S.walking;
   });
+  $('wp-tool-place').hidden = !isWorld(map());
   document.querySelectorAll('[data-drawby]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.drawby === S.drawBy ? 'true' : 'false'));
   $('wp-wand').hidden = S.drawBy !== 'wand';
   $('wp-spread').value = String(S.spread);
   $('wp-spread-val').textContent = String(S.spread);
   let help = TOOL_HELP[S.tool] || '';
   if (ed.isShape(S.tool)) help += ' ' + (S.drawBy === 'wand' ? WAND_HELP : HAND_HELP);
+  if (S.tool === 'place' && S.placeFor && S.maps[S.placeFor]) help = 'Tap the world map where ' + mapName(S.placeFor) + ' is.';
   $('wp-tool-help').textContent = help;
 }
 
@@ -150,9 +153,11 @@ function buildPicked(box, m) {
   if (s.kind === 'exit') exitForm(form, m, s.i);
   else if (s.kind === 'person') personForm(form, m, s.i);
   else if (s.kind === 'spot') spotForm(form, m, s.i);
+  else if (s.kind === 'place') placeForm(form, m, s.i);
   else if (s.kind === 'arrival') {
-    const a = arrivalsInto(S.cur)[s.i], b = el('button', { type: 'button' }, form, 'Go to that way out on ' + mapName(a.from));
-    b.addEventListener('click', () => emit('open-map', { id: a.from, sel: { kind: 'exit', i: a.exit } }));
+    const a = arrivalsInto(S.cur)[s.i];
+    const b = el('button', { type: 'button' }, form, a.place != null ? 'Go to that place on the world map' : 'Go to that way out on ' + mapName(a.from));
+    b.addEventListener('click', () => emit('open-map', { id: a.from, sel: a.place != null ? { kind: 'place', i: a.place } : { kind: 'exit', i: a.exit } }));
   }
 }
 
@@ -185,7 +190,12 @@ function headline(m, s) {
   }
   if (s.kind === 'arrival') {
     const a = arrivalsInto(S.cur)[s.i];
-    return '<b>Where she arrives from ' + esc(mapName(a.from)) + '</b> · ' + xy(a.at) + '<small>Drag it to move it. Keep it on a walk area and out of the ways out, or she leaves again at once.</small>';
+    const from = a.place != null ? 'the world map (' + S.maps[a.from].places[a.place].name + ')' : mapName(a.from);
+    return '<b>Where she arrives from ' + esc(from) + '</b> · ' + xy(a.at) + '<small>Drag it to move it. Keep it on a walk area and out of the ways out, or she leaves again at once.</small>';
+  }
+  if (s.kind === 'place') {
+    const q = m.places[s.i];
+    return '<b>' + esc(q.name) + '</b> on the world map · ' + xy(q.at) + '<small>On a walk she can go into ' + (q.to && S.maps[q.to] ? esc(mapName(q.to)) : 'the map it leads to') + ' from here. Drag the flag to where the place is.</small>';
   }
   return '<b>Where a walk starts</b> · ' + xy(m.start) + '<small>Drag it to move it. The little figure shows how tall people are on this map. “Where she can reach” checks from here.</small>';
 }
@@ -197,7 +207,8 @@ function exitForm(form, m, i) {
   el('span', null, f, 'Leads to');
   const sel = el('select', { id: 'wp-exit-to' }, f);
   el('option', { value: '' }, sel, '(nowhere yet)');
-  for (const id of S.order) el('option', { value: id }, sel, mapName(id) + (id === cur ? ' (this map)' : ''));
+  for (const id of worldIds()) if (id !== cur) el('option', { value: id }, sel, 'The world map (' + mapName(id) + ')');
+  for (const id of S.order) if (!isWorld(S.maps[id])) el('option', { value: id }, sel, mapName(id) + (id === cur ? ' (this map)' : ''));
   el('option', { value: '\u0000other' }, sel, 'Somewhere not in these maps…');
   const elsewhere = e.to && !S.maps[e.to];
   sel.value = elsewhere ? '\u0000other' : e.to || '';
@@ -211,33 +222,52 @@ function exitForm(form, m, i) {
   const show = () => {
     const t = e.to && S.maps[e.to];
     arrive.hidden = !t;
-    if (t) say.textContent = isPt(e.at) ? 'She arrives on ' + mapName(e.to) + ' at x ' + e.at[0] + ', y ' + e.at[1] + ' (the pink ring there).' : 'She arrives where a walk starts on ' + mapName(e.to) + '.';
+    if (!t) return;
+    if (isWorld(t)) {
+      const q = (t.places || []).find((x) => x.id === e.at);
+      say.textContent = q ? 'She comes out on the world map at ' + q.name + ' (its gold flag).' : 'She comes out on the world map where a walk starts there.';
+    } else say.textContent = isPt(e.at) ? 'She arrives on ' + mapName(e.to) + ' at x ' + e.at[0] + ', y ' + e.at[1] + ' (the pink ring there).' : 'She arrives where a walk starts on ' + mapName(e.to) + '.';
   };
   show();
   sel.addEventListener('change', () => {
-    remember([cur]);
+    const toWorld = isWorld(S.maps[sel.value]);
+    remember(toWorld ? [cur, sel.value] : [cur]);
     if (sel.value === '\u0000other') { e.to = other.value.trim(); otherBox.hidden = false; other.focus(); }
     else {
       otherBox.hidden = true;
       const was = e.to;
       e.to = sel.value;
       const t = S.maps[e.to];
-      // she arrives across from where she left, until that pink ring is dragged somewhere better
-      if (t && e.to !== was) e.at = arrivalFor(cur, i, e.to);
-      if (t && (!e.label || (S.maps[was] && e.label === S.maps[was].name))) e.label = t.name;
+      if (toWorld) {
+        // she comes out at this map's place on the world map (one is made in its middle if there is none)
+        const pi = placeFor(e.to, cur);
+        e.at = t.places[pi].id;
+        if (!e.label || (S.maps[was] && e.label === S.maps[was].name)) e.label = t.name;
+      } else {
+        // she arrives across from where she left, until that pink ring is dragged somewhere better
+        if (t && e.to !== was) e.at = arrivalFor(cur, i, e.to);
+        if (t && (!e.label || (S.maps[was] && e.label === S.maps[was].name))) e.label = t.name;
+      }
     }
     show();
     changed('');
+    emit('maps');
     forgetForm();
     renderPicked();
   });
   go.addEventListener('click', () => {
+    const t = S.maps[e.to];
+    if (isWorld(t)) {
+      const pi = (t.places || []).findIndex((x) => x.id === e.at);
+      emit('open-map', { id: e.to, sel: pi >= 0 ? { kind: 'place', i: pi } : null });
+      return;
+    }
     const ai = arrivalsInto(e.to).findIndex((a) => a.from === cur && a.exit === i);
     emit('open-map', { id: e.to, sel: ai >= 0 ? { kind: 'arrival', i: ai } : null });
   });
   // the same way back, made in one go
   const t = e.to && S.maps[e.to];
-  if (t && e.to !== cur && !t.exits.some((x) => x.to === cur)) {
+  if (t && !isWorld(t) && e.to !== cur && !t.exits.some((x) => x.to === cur)) {
     const back = el('button', { type: 'button' }, form, 'Make the way back from ' + mapName(e.to));
     back.addEventListener('click', () => {
       const made = wayBack(cur, i);
@@ -248,6 +278,40 @@ function exitForm(form, m, i) {
       renderPicked();
     });
   }
+}
+
+function placeForm(form, m, i) {
+  const q = m.places[i], world = S.cur;
+  textBox(form, 'Name (on its banner)', q.name, (v) => { q.name = v; }, { max: 80 });
+  const f = el('label', { class: 'wp-field' }, form);
+  el('span', null, f, 'Leads into');
+  const sel = el('select', { id: 'wp-place-to' }, f);
+  el('option', { value: '' }, sel, '(nowhere yet)');
+  for (const id of S.order) if (!isWorld(S.maps[id])) el('option', { value: id }, sel, mapName(id));
+  if (q.to && !S.maps[q.to]) el('option', { value: q.to }, sel, q.to + ' (not here)');
+  sel.value = q.to || '';
+  sel.addEventListener('change', () => {
+    const id = sel.value;
+    if (!id || !S.maps[id]) { remember([world]); q.to = id; changed(''); forgetForm(); renderPicked(); return; }
+    // linked as if it had been put on the world map from the list: a way back is made on that map
+    remember([world, id]);
+    linkPlaceTo(world, i, id, true);
+    if (/^Place \d+$/.test(q.name)) q.name = mapName(id);
+    changed(mapName(id) + ' is linked: its way out back to the world map is the blue box at its edge.');
+    emit('maps');
+    forgetForm();
+    renderPicked();
+  });
+  const row = el('div', { class: 'wp-field-row' }, form);
+  const say = el('p', { class: 'wp-small', style: 'margin:0' }, row);
+  if (q.to && S.maps[q.to]) {
+    say.textContent = isPt(q.arrive) ? 'She arrives on ' + mapName(q.to) + ' at x ' + q.arrive[0] + ', y ' + q.arrive[1] + ' (the pink ring there).' : 'She arrives where a walk starts on ' + mapName(q.to) + '.';
+    el('button', { type: 'button' }, row, 'Show it').addEventListener('click', () => {
+      const ai = arrivalsInto(q.to).findIndex((a) => a.from === world && a.place === i);
+      emit('open-map', { id: q.to, sel: ai >= 0 ? { kind: 'arrival', i: ai } : null });
+    });
+  } else say.textContent = 'Pick the map she goes into from here.';
+  el('p', { class: 'wp-small', style: 'margin:0' }, form, 'Key in the maps file: ' + q.id + '. A way out to the world map from ' + (q.to && S.maps[q.to] ? mapName(q.to) : 'that map') + ' brings her back here.');
 }
 
 function personForm(form, m, i) {
@@ -261,7 +325,7 @@ function personForm(form, m, i) {
     const key = form.querySelector('[data-live="key"]');
     if (key) key.textContent = 'Key in the maps file: ' + p.id;
   }, { max: 80 });
-  const looks = window.WalkingPathsEngine ? window.WalkingPathsEngine.looks().filter((l) => l !== 'io') : [];
+  const looks = window.WalkingPathsEngine ? window.WalkingPathsEngine.looks().filter((l) => !/^io/.test(l)) : [];
   const f = el('label', { class: 'wp-field' }, form);
   el('span', null, f, 'Looks like (on a walk)');
   const sel = el('select', null, f);
@@ -284,6 +348,7 @@ function personForm(form, m, i) {
   textBox(form, 'What they say (on a walk)', p.says, (v) => { if (v) p.says = v; else delete p.says; }, { area: true, max: 2000 });
   el('p', { class: 'wp-small', style: 'margin:0', 'data-live': 'key' }, form, 'Key in the maps file: ' + p.id);
 }
+const WALKER_NAMES = { 'io-painted': 'Io, painted (the paper doll from Envoi)', io: 'Io, in pixels' };
 const LOOK_NAMES = { hooded: 'Someone hooded', witch2: 'A witch', smith: 'A smith', elder: 'An elder', sailor: 'A sailor', child: 'A child', aurosi: 'An Aurosi', gnome: 'A gnome', sol: 'Sol', halcyon: 'Halcyon' };
 
 function spotForm(form, m, i) {
@@ -364,18 +429,39 @@ export function renderMapSettings() {
     const v = name.value.trim() || before;
     m.name = before;
     if (v === before) { name.value = v; S.rev++; return; }
-    const nid = keyAfterRename(id, v), leading = S.order.filter((k) => S.maps[k].exits.some((e) => e.to === id));
+    const nid = keyAfterRename(id, v), leading = mapsLeadingTo(id);
     remember([...new Set([id, nid, ...leading])]);
     if (renameMap(id, v) !== id) S.cur = nid;
     changed('');
     emit('maps');
   });
+  // the world map: the map of the whole land, whose places lead into the others
+  const wl = el('label', { class: 'wp-check' }, box);
+  const wc = el('input', { type: 'checkbox', id: 'wp-map-world' }, wl);
+  wc.checked = isWorld(m);
+  wl.append(document.createTextNode('This is the world map'));
+  el('p', { class: 'wp-small' }, box, isWorld(m)
+    ? 'Its gold flags are places that lead into the other maps, and their ways out to the world map bring her back. With no walk areas drawn she can go anywhere on it.'
+    : 'Tick it for the map of the whole land: its places lead into the other maps.');
+  wc.addEventListener('change', () => {
+    if (wc.checked) {
+      const nid = makeWorld(id);
+      S.cur = nid;
+      changed('This is the world map now. Put the other maps on it with the list below.');
+    } else { unmakeWorld(id); changed('This is no longer the world map.'); }
+    emit('maps');
+    emit('tool');
+  });
+  if (isWorld(m)) placesList(box, id, m);
   // the picture
   const pic = el('div', { class: 'wp-field-row' }, box);
   const say = el('p', { class: 'wp-small' }, pic);
-  if (m.pic) say.textContent = 'Picture: ' + (m.pic.file || 'pasted') + ' · ' + m.pic.w + ' × ' + m.pic.h;
+  const blob = m.pic && pictureBlob(m.pic.key);
+  if (m.pic) say.textContent = 'Picture: ' + (m.pic.file || 'pasted') + ' · ' + m.pic.w + ' × ' + m.pic.h + (blob ? ' · ' + sizeText(blob.size) : '');
   else say.textContent = m.wantPicture ? 'Its picture (' + m.wantPicture + ') wasn’t with the maps file.' : 'No picture yet.';
-  const rep = el('button', { type: 'button' }, pic, m.pic ? 'Replace…' : 'Add its picture…');
+  const picBtns = el('div', { class: 'wp-row' }, box);
+  if (m.pic) el('button', { type: 'button', id: 'wp-picture-size', class: blob && blob.size > 1048576 ? 'wp-primary' : '' }, picBtns, 'Picture size…').addEventListener('click', () => emit('shrink'));
+  const rep = el('button', { type: 'button' }, picBtns, m.pic ? 'Replace the picture…' : 'Add its picture…');
   rep.addEventListener('click', () => emit('replace-picture'));
   // size and people's height
   const [w, h] = mapSize(m);
@@ -416,6 +502,7 @@ export function renderMapSettings() {
     changed('People are now ' + v + ' pixels tall on this map. The little figure at the start shows it.');
   });
   el('p', { class: 'wp-small' }, box, 'It sets how wide a path must be to walk along, and how big people look on a walk.');
+  walkSliders(box, id, m);
   // deleting it (twice, to be sure)
   const del = el('button', { type: 'button', class: 'wp-danger' }, box, 'Delete this map');
   if (armed && armed.id === id) { del.textContent = 'Sure? Tap again to delete ' + m.name; del.classList.add('is-armed'); }
@@ -437,6 +524,56 @@ export function renderMapSettings() {
   });
 }
 
+// the world map's list of the other maps: on it already, or a button to put it on
+function placesList(box, world, w) {
+  const others = S.order.filter((k) => k !== world && !isWorld(S.maps[k]));
+  el('h3', null, box, 'Places on the world map');
+  if (!others.length) { el('p', { class: 'wp-small' }, box, 'Add the pictures of the other maps, then put each one on the world map here.'); return; }
+  const ul = el('ul', { class: 'wp-places' }, box);
+  for (const k of others) {
+    const li = el('li', null, ul), i = (w.places || []).findIndex((q) => q.to === k);
+    el('span', null, li, mapName(k));
+    if (i >= 0) {
+      el('small', null, li, 'on the map');
+      el('button', { type: 'button' }, li, 'Show').addEventListener('click', () => emit('open-map', { id: world, sel: { kind: 'place', i } }));
+    } else {
+      const b = el('button', { type: 'button', class: 'wp-primary', 'data-put': k }, li, 'Put it on');
+      b.addEventListener('click', () => {
+        ed.setTool('place');
+        S.placeFor = k;
+        emit('tool');
+        ed.note('Tap the world map where ' + mapName(k) + ' is.');
+      });
+    }
+  }
+}
+
+// on a walk: how close the camera is and how fast she walks, on this map (live while walking)
+function walkSliders(box, id, m) {
+  el('h3', null, box, 'On a walk');
+  const slider = (label, idName, min, max, step, value, show, set) => {
+    const f = el('label', { class: 'wp-field wp-slider' }, box);
+    const top = el('span', null, f, label + ' ');
+    const b = el('b', null, top, show(value));
+    const inp = el('input', { type: 'range', min, max, step, id: idName }, f);
+    inp.value = String(value);
+    let kept = false;
+    inp.addEventListener('pointerdown', () => { kept = false; });
+    inp.addEventListener('input', () => {
+      if (!kept) { remember([id]); kept = true; }
+      const v = Number(inp.value);
+      b.textContent = show(v);
+      set(v);
+      S.rev++;
+      emit('tuned', id);
+    });
+    inp.addEventListener('change', () => { if (kept) changed(''); kept = false; });
+  };
+  slider('How close the camera is', 'wp-map-zoom', 0.4, 3, 0.1, Math.round(((m.zoom || ZOOM) / ZOOM) * 10) / 10, (v) => v.toFixed(1) + '×', (v) => { m.zoom = Math.round(v * ZOOM * 1000) / 1000; });
+  slider('Walking speed', 'wp-map-pace', 0.5, 6, 0.1, m.pace || PACE, (v) => (Math.abs(v - PACE) < 0.05 ? 'normal' : v < PACE ? 'slower' : 'faster') + ' (' + v.toFixed(1) + ')', (v) => { m.pace = Math.round(v * 100) / 100; });
+  el('p', { class: 'wp-small' }, box, 'Speed is in her own heights a second. Try them while you walk: they change at once.');
+}
+
 // ---------------------------------------------------------------------------------------------
 // layers, and what she can't reach
 
@@ -445,8 +582,9 @@ export function renderLayers() {
   $('wp-showpaths').checked = !!S.showPaths;
   const w = $('wp-walker');
   if (!w.options.length && window.WalkingPathsEngine) {
-    for (const l of window.WalkingPathsEngine.looks()) el('option', { value: l }, w, l === 'io' ? 'Io' : LOOK_NAMES[l] || l);
+    for (const l of window.WalkingPathsEngine.looks()) el('option', { value: l }, w, WALKER_NAMES[l] || LOOK_NAMES[l] || l);
   }
+  if (w.options.length && ![...w.options].some((o) => o.value === S.walker)) S.walker = w.options[0].value;
   w.value = S.walker;
   renderReach();
 }
@@ -476,13 +614,16 @@ export function renderReach() {
 // ---------------------------------------------------------------------------------------------
 // a question asked in the page (the artifact viewer shows no confirm boxes)
 
-export function ask(title, text, buttons) {
+// (`more`: anything else to show under the text, like a list to pick from)
+export function ask(title, text, buttons, more) {
   return new Promise((resolve) => {
-    const d = $('wp-dialog'), row = $('wp-dialog-buttons');
+    const d = $('wp-dialog'), row = $('wp-dialog-buttons'), extra = $('wp-dialog-more');
     $('wp-dialog-title').textContent = title;
     $('wp-dialog-text').textContent = text;
     row.textContent = '';
-    const done = (v) => { d.hidden = true; document.removeEventListener('keydown', onKey, true); resolve(v); };
+    extra.textContent = '';
+    if (more) extra.appendChild(more);
+    const done = (v) => { d.hidden = true; extra.textContent = ''; document.removeEventListener('keydown', onKey, true); resolve(v); };
     const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
     buttons.forEach((b, i) => {
       const btn = el('button', { type: 'button', class: i === 0 ? 'wp-primary' : '' }, row, b.label);

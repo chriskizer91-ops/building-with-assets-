@@ -8,6 +8,7 @@ import * as ed from './editor.js';
 import * as panel from './panel.js';
 import * as files from './files.js';
 import { toggleWalk, stopWalk, setWalker, setShowPaths, currentField } from './walk.js';
+import { openShrink } from './shrink.js';
 import { $ } from './util.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -43,7 +44,7 @@ on('picked', () => { panel.renderPicked(); panel.renderBar(); });
 on('draft', () => { panel.renderPicked(); panel.renderBar(); });
 on('tool', () => { panel.renderTools(); panel.renderPicked(); panel.renderBar(); });
 on('layers', () => panel.renderLayers());
-on('walking', () => { panel.renderBar(); panel.renderTools(); if (!S.walking) { mapsShown = ''; renderAll(true); keepSoon(); } });
+on('walking', () => { panel.renderBar(); panel.renderTools(); if (!S.walking) { mapsShown = ''; renderAll(true); keepSoon(); checkSoon(); } });
 const WAND_SAY = $('wp-wand-say').textContent;
 on('wand', (busy) => { $('wp-wand-say').textContent = busy ? 'Looking round the picture…' : WAND_SAY; });
 
@@ -75,6 +76,12 @@ on('undo', doUndo);
 on('redo', doRedo);
 on('walk', toggleWalk);
 on('replace-picture', () => $('wp-file-replace').click());
+on('shrink', () => { if (S.walking) stopWalk(); if (S.cur) openShrink(S.cur); });
+// the camera and speed sliders work on a walk that is going on
+on('tuned', (id) => {
+  const f = currentField(), m = S.maps[id];
+  if (f && m) f.tune(id, { zoom: m.zoom, pace: m.pace });
+});
 
 function afterHistory(say, was) {
   if (S.sel && !ed.valid(S.sel)) S.sel = null;
@@ -167,6 +174,7 @@ $('wp-remove-examples').addEventListener('click', () => {
 const takeFiles = (input, fn) => input.addEventListener('change', async () => {
   const list = [...input.files];
   input.value = '';
+  if (S.walking) stopWalk();
   if (list.length) await fn(list);
   renderAll(true);
 });
@@ -196,12 +204,13 @@ for (const k of Object.keys(S.layers)) {
     c.blur();
   });
 }
-$('wp-walker').addEventListener('change', (e) => { S.walker = e.target.value; setWalker(S.walker); keepSoon(); });
+$('wp-walker').addEventListener('change', (e) => { S.walker = e.target.value; S.walkerChosen = true; setWalker(S.walker); keepSoon(); });
 $('wp-showpaths').addEventListener('change', (e) => { S.showPaths = e.target.checked; setShowPaths(S.showPaths); keepSoon(); });
 
-// buttons shouldn't keep the keyboard after a tap (Space and Enter belong to the picture)
+// buttons and sliders shouldn't keep the keyboard after a tap or a drag (Space, Enter and the
+// arrows belong to the picture, and to her on a walk)
 document.addEventListener('pointerup', (e) => {
-  const b = e.target && e.target.closest ? e.target.closest('.wp-bar button, .wp-panel button, .wp-drawbar button') : null;
+  const b = e.target && e.target.closest ? e.target.closest('.wp-bar button, .wp-panel button, .wp-drawbar button, .wp-panel input[type="range"]') : null;
   if (b) setTimeout(() => b.blur(), 0);
 });
 
@@ -226,6 +235,7 @@ document.addEventListener('paste', async (e) => {
   const list = [...(e.clipboardData.files || [])].filter((f) => /^image\//.test(f.type));
   if (!list.length) return;
   e.preventDefault();
+  if (S.walking) stopWalk();
   await files.addPictures(list.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], 'pasted-' + (i + 1) + '.' + (f.type.split('/')[1] || 'png'), { type: f.type }))));
   renderAll(true);
 });

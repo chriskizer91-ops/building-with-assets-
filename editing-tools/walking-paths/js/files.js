@@ -3,9 +3,10 @@
 // an ordinary download.
 
 import { S, map, mapSize, changed, remember, emit } from './state.js';
-import { fileMap, pictureFileName, readMapsFile, attachPictures, takeMaps, mapFromPicture, addMap, resizeMap, keepNow } from './project.js';
-import { pictureBlob, pictureImage, whenReady, measure, addPicture } from './pictures.js';
-import { $, prettyJson, blobToDataURL, stamp, plural, sizeText, slug } from './util.js';
+import { fileMap, pictureFileName, readMapsFile, attachPictures, takeMaps, mapFromPicture, addMap, resizeMap, keepNow, worldIds, makeWorld, connectAll, mapName } from './project.js';
+import { pictureBlob, pictureImage, pictureURL, whenReady, measure, addPicture } from './pictures.js';
+import { shrinkBig, BIG_SIDE } from './shrink.js';
+import { $, el, prettyJson, blobToDataURL, stamp, plural, sizeText, slug } from './util.js';
 import { ask, status } from './panel.js';
 import { bbox } from './geom.js';
 import * as ed from './editor.js';
@@ -184,9 +185,9 @@ export const saveMask = () => saving('Drawing the walk mask', async () => {
 });
 
 // one page that walks round every map, with nothing to load (it works in Mooncart too)
-async function engineSource() {
+async function engineSource(painted) {
   const parts = [];
-  for (const id of ['wp-engine-sprites', 'wp-engine']) {
+  for (const id of painted ? ['wp-engine-sprites', 'wp-engine-painted', 'wp-engine'] : ['wp-engine-sprites', 'wp-engine']) {
     const s = $(id);
     if (!s) throw new Error('the walk engine isn’t in this page');
     if (s.textContent.trim()) parts.push(s.textContent);
@@ -209,7 +210,7 @@ export const saveWalkPage = () => saving('Making the walk-around page', async ()
     '<title>' + title.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;')) + '</title>\n' +
     '<style>html,body{margin:0;height:100%;background:#05030c}#walk{position:fixed;inset:0}</style>\n</head>\n<body>\n<div id="walk"></div>\n' +
     COMMENT + ' Made with Walking Paths: walk with the arrow keys, WASD or the arrows on the screen; Enter talks or looks; M lists the maps. --' + '>\n' +
-    '<script>\n' + scriptSafe(await engineSource()) + '\n</script>\n' +
+    '<script>\n' + scriptSafe(await engineSource(S.walker === 'io-painted')) + '\n</script>\n' +
     '<script>\nWalkingPathsEngine.play(document.getElementById("walk"), ' + scriptSafe(JSON.stringify(play)) + ');\n</script>\n</body>\n</html>\n';
   return { name: slug(title) + '.html', data: new Blob([html], { type: 'text/html' }), say: 'Open it in a web browser, or add it to Mooncart, to walk round.' };
 });
@@ -240,7 +241,81 @@ export async function addPictures(files) {
     ed.showView();
   }
   status(bad.length ? 'This browser can’t show ' + bad.join(', ') + '.' : ids.length ? 'Added ' + plural(ids.length, 'map', 'maps') + '. They are kept in this browser; save the maps file to keep them for good.' : '', bad.length ? 'bad' : 'good');
+  if (ids.length) await afterAdding(ids);
   return ids;
+}
+
+// Just added: which picture is the world map (when there isn't one yet), putting them on the world
+// map (when there is), and making big pictures smaller. One question, only when there is something to ask.
+const BIG_BYTES = 1.5 * 1048576;
+const bigOne = (id) => {
+  const m = S.maps[id], b = m && m.pic && pictureBlob(m.pic.key);
+  return !!b && (b.size > BIG_BYTES || Math.max(m.pic.w, m.pic.h) > BIG_SIDE);
+};
+async function afterAdding(ids) {
+  const worlds = worldIds(), big = ids.filter(bigOne);
+  const pickWorld = !worlds.length && ids.length >= 2, joinWorld = worlds.length > 0;
+  if (!pickWorld && !joinWorld && !big.length) return;
+  const more = document.createElement('div'), text = [];
+  let worldPick = null, joinBox = null, shrinkBox = null;
+  if (pickWorld) {
+    text.push('Is one of them the world map: the map of the whole land, with the others as places on it? Pick it, and each of the others gets a gold flag on it that leads there, and a way back.');
+    worldPick = el('div', { class: 'wp-choices', role: 'radiogroup', 'aria-label': 'The world map' }, more);
+    const guess = ids.find((id) => /world/i.test(S.maps[id].name + ' ' + (S.maps[id].pic ? S.maps[id].pic.file : ''))) || '';
+    for (const id of ids.concat([''])) {
+      const l = el('label', null, worldPick), r = el('input', { type: 'radio', name: 'wp-world-pick', value: id }, l);
+      r.checked = id === guess;
+      if (id) {
+        const url = S.maps[id].pic ? pictureURL(S.maps[id].pic.key) : null;
+        if (url) el('img', { src: url, alt: '' }, l); else el('i', { class: 'wp-nothumb' }, l);
+      }
+      el('span', null, l, id ? mapName(id) : 'None of them: they are all separate maps');
+    }
+  } else if (joinWorld) {
+    text.push('Put ' + (ids.length === 1 ? 'it' : 'them') + ' on the world map, ' + mapName(worlds[0]) + '? ' + (ids.length === 1 ? 'It gets' : 'Each gets') + ' a gold flag there that leads in, and a way back to the world map at ' + (ids.length === 1 ? 'its' : 'their') + ' edge.');
+    const l = el('label', { class: 'wp-check' }, more);
+    joinBox = el('input', { type: 'checkbox', id: 'wp-add-join' }, l);
+    joinBox.checked = true;
+    l.append(document.createTextNode('Put ' + (ids.length === 1 ? 'it' : 'them') + ' on the world map'));
+  }
+  if (big.length) {
+    const m = S.maps[big[0]], b = pictureBlob(m.pic.key), dims = m.pic.w + ' × ' + m.pic.h + ', ' + sizeText(b.size);
+    const names = big.map((id) => mapName(id)), list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    text.push(big.length > 1 ? 'Some of the pictures are big: ' + list + '.' : ids.length === 1 ? 'This picture is big: ' + dims + '.' : names[0] + ' is a big picture: ' + dims + '.');
+    const l = el('label', { class: 'wp-check' }, more);
+    shrinkBox = el('input', { type: 'checkbox', id: 'wp-add-shrink' }, l);
+    shrinkBox.checked = true;
+    l.append(document.createTextNode('Make ' + (big.length === 1 ? 'it' : 'them') + ' smaller, so ' + (big.length === 1 ? 'it loads' : 'they load') + ' quicker (on a phone too)'));
+    el('p', { class: 'wp-small' }, more, 'No more than ' + BIG_SIDE + ' pixels on the longest side. The map keeps its size, so nothing drawn on it moves. Picture size, under This map, shows the other sizes.');
+  }
+  const ok = await ask(ids.length === 1 ? 'Added ' + mapName(ids[0]) : 'Added ' + ids.length + ' pictures', text.join('\n\n'), [{ label: 'Done', value: true }], more);
+  if (!ok) return;
+  const says = [];
+  if (shrinkBox && shrinkBox.checked) {
+    status('Making the big pictures smaller…');
+    const n = await shrinkBig(big);
+    says.push(n ? plural(n, 'picture is', 'pictures are') + ' smaller now.' : 'The pictures were already as small as they get.');
+  }
+  const picked = worldPick && worldPick.querySelector('input:checked');
+  if (picked && picked.value && S.maps[picked.value]) {
+    const world = makeWorld(picked.value), others = ids.filter((id) => id !== picked.value && S.maps[id]);
+    connectAll(world, others);
+    ed.keepView();
+    S.cur = world;
+    S.sel = null;
+    says.push((/world/i.test(mapName(world)) ? 'That is the world map now.' : mapName(world) + ' is the world map now.') + ' Drag each gold flag to where that place is, then Walk it to try them.');
+  } else if (joinBox && joinBox.checked && S.maps[worlds[0]]) {
+    connectAll(worlds[0], ids);
+    ed.keepView();
+    S.cur = worlds[0];
+    S.sel = null;
+    says.push((ids.length === 1 ? mapName(ids[0]) + ' is' : 'They are') + ' on the world map: drag ' + (ids.length === 1 ? 'its gold flag' : 'the new gold flags') + ' to where ' + (ids.length === 1 ? 'it is' : 'they are') + '.');
+  }
+  if (!says.length) return;
+  changed(says.join(' '));
+  emit('maps');
+  ed.showView();
+  status(says.join(' '), 'good');
 }
 
 export async function openFiles(files) {

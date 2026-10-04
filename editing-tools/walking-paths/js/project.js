@@ -5,10 +5,14 @@ import { S, changed, remember, mapSize, emit } from './state.js';
 import * as store from './store.js';
 import * as pics from './pictures.js';
 import { clone, isPt, isRect, slug, niceName, extFor, dataURLToBlob, clamp } from './util.js';
-import { bbox, scalePts } from './geom.js';
+import { bbox, scalePts, inRect } from './geom.js';
 
 // the maps file's own fields, in the order they are written
-const KNOWN = ['name', 'src', 'size', 'walker', 'start', 'walk', 'block', 'front', 'exits', 'people', 'spots'];
+const KNOWN = ['name', 'kind', 'src', 'size', 'walker', 'zoom', 'pace', 'start', 'walk', 'block', 'front', 'exits', 'people', 'spots', 'places'];
+
+// on a walk: how close the camera is (Envoi's numbers, 0.7 is normal) and how fast she walks
+// (her own heights a second)
+export const ZOOM = 0.7, PACE = 1.7;
 const INTERNAL = new Set(['pic', 'example', 'wantPicture']);
 
 // how tall someone walking is, in map pixels: Envoi's Io is 52 on a 1024-pixel-high painting
@@ -46,8 +50,11 @@ export function normalizeMap(raw, size) {
   const m = {};
   for (const k of Object.keys(raw)) if (!KNOWN.includes(k) && !INTERNAL.has(k)) m[k] = clone(raw[k]);
   m.name = String(raw.name || '').slice(0, 80) || 'Map';
+  if (raw.kind != null) m.kind = String(raw.kind);
   m.size = [W, H];
   m.walker = Number.isFinite(raw.walker) && raw.walker >= 4 ? Math.round(raw.walker) : defaultWalker(W, H);
+  if (Number.isFinite(raw.zoom) && raw.zoom > 0) m.zoom = clamp(raw.zoom, 0.05, 20);
+  if (Number.isFinite(raw.pace) && raw.pace > 0) m.pace = clamp(raw.pace, 0.1, 40);
   m.start = isPt(raw.start) ? pt(raw.start) : [Math.round(W / 2), Math.round(H / 2)];
   m.walk = shapes(raw.walk);
   m.block = shapes(raw.block);
@@ -73,15 +80,23 @@ export function normalizeMap(raw, size) {
     else { o.at = pt(s.at); delete o.rect; }
     return o;
   });
+  // a world map's places: { id, name, at (here), to (a map), arrive (where she arrives on it) }
+  if (Array.isArray(raw.places)) m.places = raw.places.filter((p) => p && isPt(p.at)).map((p, i) => Object.assign(clone(p), {
+    id: String(p.id || slug(p.name) || 'place-' + (i + 1)), name: String(p.name || p.id || 'A place'), at: pt(p.at),
+    to: p.to == null ? '' : String(p.to), arrive: isPt(p.arrive) ? [Math.round(p.arrive[0]), Math.round(p.arrive[1])] : null,
+  }));
   return m;
 }
 
 // a map in the maps file's shape; `src` is where its picture is (left out when undefined)
 export function fileMap(m, src) {
   const o = { name: m.name };
+  if (m.kind !== undefined) o.kind = m.kind;
   if (src !== undefined) o.src = src;
   o.size = m.size.slice();
   o.walker = m.walker;
+  if (m.zoom !== undefined) o.zoom = m.zoom;
+  if (m.pace !== undefined) o.pace = m.pace;
   o.start = m.start.slice();
   o.walk = clone(m.walk);
   o.block = clone(m.block);
@@ -89,6 +104,7 @@ export function fileMap(m, src) {
   o.exits = clone(m.exits);
   o.people = clone(m.people);
   o.spots = clone(m.spots);
+  if (m.places) o.places = clone(m.places);
   for (const k of Object.keys(m)) if (!(k in o) && !INTERNAL.has(k)) o[k] = clone(m[k]);
   return o;
 }
@@ -100,13 +116,134 @@ export function pictureFileName(id) {
   return id + '.' + extFor(m.pic.type, m.pic.file);
 }
 
-// where people come into map `id` from the ways out of every map
+// where people come into map `id`: from the ways out of every map, and from the world map's places
 export function arrivalsInto(id) {
   const out = [];
   for (const from of S.order) (S.maps[from].exits || []).forEach((e, exit) => {
     if (e.to === id && isPt(e.at)) out.push({ from, exit, at: e.at });
   });
+  for (const from of worldIds()) (S.maps[from].places || []).forEach((p, place) => {
+    if (p.to === id && isPt(p.arrive)) out.push({ from, place, at: p.arrive });
+  });
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// the world map: the map of the whole land, whose places lead into the other maps
+
+export const isWorld = (m) => !!m && m.kind === 'world';
+export const worldIds = () => S.order.filter((id) => isWorld(S.maps[id]));
+
+// the places on world maps that lead into map `id`
+export function placesInto(id) {
+  const out = [];
+  for (const world of worldIds()) (S.maps[world].places || []).forEach((p, i) => { if (p.to === id) out.push({ world, i, place: p }); });
+  return out;
+}
+
+// map `id` becomes the world map; its key becomes "world" when that is free, as in Envoi
+export function makeWorld(id) {
+  const nid = id !== 'world' && !S.maps.world ? 'world' : id;
+  remember([...new Set([id, nid, ...mapsLeadingTo(id)])]);
+  const m = S.maps[id];
+  m.kind = 'world';
+  if (!Array.isArray(m.places)) m.places = [];
+  return nid === id ? id : rekey(id, nid);
+}
+export function unmakeWorld(id) {
+  const m = S.maps[id];
+  remember([id]);
+  delete m.kind;
+  if (m.places && !m.places.length) delete m.places;
+}
+
+const uniquePlaceId = (w, base) => {
+  const root = base || 'place', taken = new Set((w.places || []).map((p) => p.id));
+  let id = root, n = 2;
+  while (taken.has(id)) id = root + '-' + n++;
+  return id;
+};
+
+// Where map `id`'s way out to the world goes: on a walk area's edge that runs along the picture's
+// edge (the one nearest the bottom middle, and not already a way out), or else the bottom middle.
+function door(id) {
+  const m = S.maps[id], [W, H] = mapSize(m), h = m.walker;
+  const side = (p) => (p[1] >= H ? 3 : p[1] <= 0 ? 2 : p[0] <= 0 ? 0 : p[0] >= W ? 1 : -1);
+  let best = null, bd = Infinity;
+  for (const pts of m.walk) for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], sd = side(a);
+    if (sd < 0 || sd !== side(b)) continue;
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < h * 0.5 || m.exits.some((e) => inRect(e.rect, mid[0], mid[1], 2))) continue;
+    const d = (mid[0] - W / 2) ** 2 + (mid[1] - H) ** 2;
+    if (d < bd) { bd = d; best = { side: sd, mid, len }; }
+  }
+  if (!best) best = { side: 3, mid: [W / 2, H], len: h * 2.4 };
+  const thick = Math.max(12, Math.round(h * 0.4)), half = Math.round(Math.min(best.len, h * 2.4) / 2), clear = Math.round((h * 8) / 52 + h * 0.6);
+  const [x, y] = best.mid;
+  const rect = best.side === 3 ? [x - half, H - thick, x + half, H] : best.side === 2 ? [x - half, 0, x + half, thick]
+    : best.side === 0 ? [0, y - half, thick, y + half] : [W - thick, y - half, W, y + half];
+  const arrive = best.side === 3 ? [x, H - thick - clear] : best.side === 2 ? [x, thick + clear] : best.side === 0 ? [thick + clear, y] : [W - thick - clear, y];
+  return { rect: [clamp(Math.round(rect[0]), 0, W), clamp(Math.round(rect[1]), 0, H), clamp(Math.round(rect[2]), 0, W), clamp(Math.round(rect[3]), 0, H)], arrive: [clamp(Math.round(arrive[0]), 0, W), clamp(Math.round(arrive[1]), 0, H)] };
+}
+
+// Link place `p` on world map `world` to map `id`: she arrives just inside that map's way out to
+// the world (made at its edge when it has none of its own yet), which brings her back to `p`.
+function linkPlace(world, p, id) {
+  const w = S.maps[world], m = S.maps[id], [MW, MH] = mapSize(m);
+  p.to = id;
+  const claimed = (e) => w.places.some((q) => q !== p && q.id === e.at && q.to === id);
+  const back = m.exits.find((e) => e.to === world && e.at === p.id) || m.exits.find((e) => e.to === world && !claimed(e));
+  if (back) {
+    const r = back.rect, c = [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2], d = [c[0], MW - c[0], c[1], MH - c[1]], sd = d.indexOf(Math.min(...d));
+    const clear = Math.round((m.walker * 8) / 52 + m.walker * 0.6);
+    const a = sd === 3 ? [c[0], r[1] - clear] : sd === 2 ? [c[0], r[3] + clear] : sd === 0 ? [r[2] + clear, c[1]] : [r[0] - clear, c[1]];
+    p.arrive = [clamp(Math.round(a[0]), 0, MW), clamp(Math.round(a[1]), 0, MH)];
+    back.at = p.id;
+  } else {
+    const d = door(id);
+    m.exits.push({ rect: d.rect, to: world, at: p.id, label: w.name });
+    p.arrive = d.arrive;
+  }
+}
+
+// Put map `id` on world map `world` at `at`: a place there that leads into it, linked as above.
+// Returns the place's index. With `quiet` the caller keeps the undo step.
+export function putOnWorld(world, id, at, quiet) {
+  const w = S.maps[world], m = S.maps[id];
+  if (!quiet) remember([world, id]);
+  if (!Array.isArray(w.places)) w.places = [];
+  const [WW, WH] = mapSize(w);
+  const p = { id: uniquePlaceId(w, slug(m.name) || slug(id)), name: m.name, at: [clamp(Math.round(at[0]), 0, WW), clamp(Math.round(at[1]), 0, WH)], to: id, arrive: null };
+  w.places.push(p);
+  linkPlace(world, p, id);
+  return w.places.length - 1;
+}
+// an existing place now leads into map `id`
+export function linkPlaceTo(world, i, id, quiet) {
+  if (!quiet) remember([world, id]);
+  linkPlace(world, S.maps[world].places[i], id);
+}
+
+// the place on world map `world` that leads into map `id` (one is made in the middle when there
+// is none), for a way out of `id` that goes to the world
+export function placeFor(world, id) {
+  const w = S.maps[world];
+  const i = (w.places || []).findIndex((p) => p.to === id);
+  if (i >= 0) return i;
+  const [WW, WH] = mapSize(w), n = (w.places || []).length;
+  return putOnWorld(world, id, [WW / 2 + ((n % 5) - 2) * WW * 0.08, WH / 2 + (Math.floor(n / 5) % 3) * WH * 0.08], true);
+}
+
+// several maps on the world map at once (just added, say): round its middle, to be dragged where they belong
+export function connectAll(world, ids) {
+  const w = S.maps[world], [WW, WH] = mapSize(w), n = ids.length, rx = WW * 0.3, ry = WH * 0.28;
+  remember([world, ...ids]);
+  ids.forEach((id, i) => {
+    if ((w.places || []).some((p) => p.to === id)) return;
+    const a = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2;
+    putOnWorld(world, id, [WW / 2 + Math.cos(a) * rx, WH / 2 + Math.sin(a) * ry], true);
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -154,6 +291,7 @@ export function rekey(id, nid) {
   S.maps[nid] = m;
   S.order = S.order.map((x) => (x === id ? nid : x));
   for (const k of S.order) for (const e of S.maps[k].exits || []) if (e.to === id) e.to = nid;
+  for (const k of S.order) for (const p of S.maps[k].places || []) if (p.to === id) p.to = nid;
   if (S.cur === id) S.cur = nid;
   if (S.views[id]) { S.views[nid] = S.views[id]; delete S.views[id]; }
   if (S.lastWalk[id]) { S.lastWalk[nid] = S.lastWalk[id]; delete S.lastWalk[id]; }
@@ -190,7 +328,7 @@ export function wayBack(from, i) {
 }
 
 // the maps whose ways out lead to `id`
-export const mapsLeadingTo = (id) => S.order.filter((k) => (S.maps[k].exits || []).some((e) => e.to === id));
+export const mapsLeadingTo = (id) => S.order.filter((k) => (S.maps[k].exits || []).some((e) => e.to === id) || (S.maps[k].places || []).some((p) => p.to === id));
 
 export function deleteMap(id) {
   remember([id, ...mapsLeadingTo(id)]);
@@ -217,8 +355,10 @@ export function resizeMap(id, w, h) {
     else s.at = [Math.round(s.at[0] * kx), Math.round(s.at[1] * ky)];
   });
   m.walker = Math.max(4, Math.round(m.walker * Math.sqrt(kx * ky)));
+  if (m.places) m.places.forEach((p) => { p.at = [Math.round(p.at[0] * kx), Math.round(p.at[1] * ky)]; });
   // and where people arrive from other maps
   for (const k of S.order) for (const e of S.maps[k].exits || []) if (e.to === id && isPt(e.at)) e.at = [Math.round(e.at[0] * kx), Math.round(e.at[1] * ky)];
+  for (const k of S.order) for (const p of S.maps[k].places || []) if (p.to === id && isPt(p.arrive)) p.arrive = [Math.round(p.arrive[0] * kx), Math.round(p.arrive[1] * ky)];
   delete S.views[id];
 }
 
@@ -304,6 +444,7 @@ export function takeMaps(entries, replace) {
   for (const e of entries) {
     const rename = renames.get(e.group);
     for (const x of e.map.exits) if (Object.prototype.hasOwnProperty.call(rename, x.to)) x.to = rename[x.to];
+    for (const x of e.map.places || []) if (Object.prototype.hasOwnProperty.call(rename, x.to)) x.to = rename[x.to];
   }
   S.cur = ids[0];
   S.sel = null;
@@ -359,7 +500,7 @@ export function keepNow() {
     maps: S.maps,
     order: S.order,
     cur: S.cur,
-    prefs: { layers: S.layers, walker: S.walker, showPaths: S.showPaths, drawBy: S.drawBy, spread: S.spread },
+    prefs: { layers: S.layers, walker: S.walker, walkerChosen: S.walkerChosen, showPaths: S.showPaths, drawBy: S.drawBy, spread: S.spread },
   };
   saving = saving.then(() => store.put('project', record)).then((ok) => emit('kept', ok));
   return saving;
@@ -373,7 +514,8 @@ export async function loadKept() {
   S.cur = S.maps[rec.cur] ? rec.cur : S.order[0] || null;
   const p = rec.prefs || {};
   if (p.layers && typeof p.layers === 'object') Object.assign(S.layers, p.layers);
-  if (typeof p.walker === 'string') S.walker = p.walker;
+  // (a walker kept before there was a choice was only the old default: the painted Io now)
+  if (typeof p.walker === 'string' && p.walkerChosen) { S.walker = p.walker; S.walkerChosen = true; }
   S.showPaths = !!p.showPaths;
   if (p.drawBy === 'hand' || p.drawBy === 'wand') S.drawBy = p.drawBy;
   if (Number.isFinite(p.spread)) S.spread = clamp(Math.round(p.spread), 1, 100);

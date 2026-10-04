@@ -68,6 +68,7 @@
           <button type="button" data-tool="person"><i class="wp-sw people"></i>+ Person</button>
           <button type="button" data-tool="thing"><i class="wp-sw thing"></i>+ Thing</button>
           <button type="button" data-tool="story"><i class="wp-sw story"></i>+ Story area</button>
+          <button type="button" data-tool="place" id="wp-tool-place" hidden><i class="wp-sw place"></i>+ Place</button>
         </div>
         <div class="wp-drawby" id="wp-drawby" role="group" aria-label="How to draw walk areas, blocks and fronts">
           <span>Draw shapes</span>
@@ -104,7 +105,7 @@
           <label><input type="checkbox" id="wp-l-walk"><i class="wp-sw walk"></i>Walk areas: where feet can go</label>
           <label><input type="checkbox" id="wp-l-block"><i class="wp-sw block"></i>Blocks: cut out of the walk areas</label>
           <label><input type="checkbox" id="wp-l-front"><i class="wp-sw front"></i>Fronts: drawn over whoever walks behind</label>
-          <label><input type="checkbox" id="wp-l-exits"><i class="wp-sw exit"></i>Ways out, and where people arrive</label>
+          <label><input type="checkbox" id="wp-l-exits"><i class="wp-sw exit"></i>Ways out, places, and where people arrive</label>
           <label><input type="checkbox" id="wp-l-people"><i class="wp-sw people"></i>People, things and story areas</label>
           <label><input type="checkbox" id="wp-l-reach"><i class="wp-sw reach"></i>Where she can reach</label>
         </div>
@@ -141,7 +142,33 @@
     <div class="wp-dialog-card">
       <h2 id="wp-dialog-title"></h2>
       <p id="wp-dialog-text"></p>
+      <div class="wp-dialog-more" id="wp-dialog-more"></div>
       <div class="wp-row" id="wp-dialog-buttons"></div>
+    </div>
+  </div>
+
+  <div class="wp-dialog" id="wp-shrink" role="dialog" aria-modal="true" aria-labelledby="wp-shrink-title" hidden>
+    <div class="wp-dialog-card wp-shrink-card">
+      <div class="wp-shrink-head">
+        <h2 id="wp-shrink-title">Picture size</h2>
+        <button type="button" id="wp-shrink-close" aria-label="Close">Close</button>
+      </div>
+      <p class="wp-small">The map keeps its size, so everything drawn on it stays where it is. A smaller picture just has fewer pixels to stretch over it, so it gets softer the closer the camera comes.</p>
+      <div class="wp-shrink-bar">
+        <div class="wp-seg" role="group" aria-label="View">
+          <button type="button" id="wp-shrink-whole" aria-pressed="true">Whole picture</button>
+          <button type="button" id="wp-shrink-close-up" aria-pressed="false">Close up</button>
+        </div>
+        <button type="button" class="wp-hold" id="wp-shrink-hold" title="Press and hold to compare">Hold to see the original</button>
+      </div>
+      <figure class="wp-shrink-view"><canvas id="wp-shrink-cv"></canvas><div class="wp-shrink-label" id="wp-shrink-label"></div></figure>
+      <div class="wp-shrink-options" id="wp-shrink-options" role="group" aria-label="Sizes"></div>
+      <label class="wp-check"><input type="checkbox" id="wp-shrink-all">Do the same to every map’s picture</label>
+      <div class="wp-row">
+        <button type="button" class="wp-primary" id="wp-shrink-use">Use this size</button>
+        <button type="button" id="wp-shrink-cancel">Cancel</button>
+      </div>
+      <p class="wp-status" id="wp-shrink-status" role="status" aria-live="polite"></p>
     </div>
   </div>
   <input type="file" id="wp-file-pictures" accept="image/*" multiple hidden>
@@ -149,6 +176,7 @@
   <input type="file" id="wp-file-replace" accept="image/*" hidden>
 </div>
 <script id="wp-engine-sprites" src="engine/sprites.js"></script>
+<script id="wp-engine-painted" src="engine/painted-io.js"></script>
 <script id="wp-engine" src="engine/engine.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>

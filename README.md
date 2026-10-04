@@ -126,7 +126,10 @@ it, and save the mapped maps for a game.
 and open it in a web browser, on a laptop or a phone. It needs no internet. It starts with two of
 Envoi's maps, Wickhollow and its jetty, as examples (**Remove the examples** when you're done with them).
 
-1. **Add pictures…** (or drop pictures on it, or paste one). Each picture becomes a map.
+1. **Add pictures…** (or drop pictures on it, or paste one). Each picture becomes a map. Add several at once
+   (a world map and three or four places, say) and it asks which one is the **world map**: each of the others
+   gets a gold flag on it that leads there, and a way back out to the world map. You can walk the whole loop
+   straight away. Big pictures can be made smaller as they come in (see *Picture size* below).
 2. Draw on it, under *Draw and change*:
    - **+ Walk area** (green): where feet can go. Tap round it point by point, or trace round it with a
      finger. Or set *Draw shapes* to **✨ Magic wand** and tap the ground: it outlines the patch of the same
@@ -138,12 +141,26 @@ Envoi's maps, Wickhollow and its jetty, as examples (**Remove the examples** whe
      **Make the way back** puts the way back on the other map for you.
    - **+ Person**, **+ Thing**, **+ Story area**: someone to talk to, something to look at, a place where
      something happens. Give each a name (and what they say, or what she sees) in the panel.
-3. **Walk it**: walk round with the arrow keys, or the arrows on the screen, or tap where to go. Ways out take
-   her to the other maps. *Where she can reach* (under *Show on the picture*) lists anything she can't get to.
+3. **Walk it**: Io walks round, painted as in Envoi (the paper doll; *Who walks* changes her). Use the arrow
+   keys, or the arrows on the screen, or tap where to go. Ways out take her to the other maps; on the world map,
+   walk to a flag and press the gold button (**Go to …**). *Where she can reach* (under *Show on the picture*)
+   lists anything she can't get to. Under *This map*, **How close the camera is** and **Walking speed** set
+   each map's walk, and change at once while she walks.
 4. **Save the maps file**: every map with its picture inside. Open it here again to carry on (on this or another
    computer or phone), or give it to Claude to put the maps in a game. There is also *Copy the map data* (to paste
    to Claude), a picture of the map with the paths on it, its walk mask (white where feet can go), and a
    **walk-around page**: one file that walks round your maps, which you can add to Mooncart.
+
+**The world map.** Tick *This is the world map* under *This map* (or pick it when adding pictures). Its gold
+flags are places: *Places on the world map* lists the other maps, with **Put it on** for any that aren't there
+yet (then tap where it is). Drag the flags to the right spots, and the blue box on each place's map (its way
+back) to where she should leave. A map with no walk areas drawn yet can be walked anywhere, so a new world map
+works before you draw anything on it.
+
+**Picture size** (under *This map*) makes a map's picture smaller, so it loads quicker, on a phone too. It
+shows the picture at six sizes with how big each file is, how much of the detail it keeps and how much memory
+it takes; **Close up** shows it the way the walk sees it, and holding **Hold to see the original** compares.
+The map keeps its size, so nothing drawn on it moves. Undo puts the old picture back.
 
 Your maps are kept in that web browser as you work, but only the maps file keeps them for good.
 
@@ -163,7 +180,8 @@ tools/          collect-games.mjs  gather and pack the games into build/collecti
                 make-icons.mjs     draw the app icon
                 build-walking-paths.mjs   Walking Paths as one file, Walking-Paths.html
                 walking-paths-smoke.mjs   check Walking Paths in Chromium
-walking-paths/  Walking Paths: plain HTML, CSS and JavaScript modules (see docs/how-it-works.md)
+editing-tools/  tools for making games: walking-paths/ is Walking Paths, plain HTML, CSS and JavaScript
+                modules (see docs/how-it-works.md)
 ```
 
 Run it on a computer:

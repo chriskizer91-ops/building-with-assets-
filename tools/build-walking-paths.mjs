@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Builds Walking Paths (walking-paths/) into one page with everything inside it: its styles, its
-// scripts, the walk engine and the two example maps with their pictures. Nothing is loaded from
+// Builds Walking Paths (editing-tools/walking-paths/) into one page with everything inside it: its styles, its
+// scripts, the walk engine with the painted Io, and the two example maps with their pictures. Nothing is loaded from
 // the internet.
 //
 //   node tools/build-walking-paths.mjs     build/walking-paths/Walking-Paths.html   one file to keep and open
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'walking-paths');
+const SRC = path.join(ROOT, 'editing-tools', 'walking-paths');
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : dflt; };
 const OUT = path.resolve(ROOT, opt('out', 'build/walking-paths'));
@@ -38,7 +38,7 @@ const app = (await build({
 })).outputFiles[0].text;
 
 // 2. the walk engine, kept as it is written (the page copies it into the walk-around pages it saves)
-const sprites = read('engine/sprites.js'), engine = read('engine/engine.js');
+const sprites = read('engine/sprites.js'), painted = read('engine/painted-io.js'), engine = read('engine/engine.js');
 
 // 3. the examples, their pictures inside
 const examples = JSON.parse(read('examples/examples.json'));
@@ -60,6 +60,7 @@ const page = [
   `<style>\n${css}</style>`,
   body,
   `<script id="wp-engine-sprites">\n${scriptSafe(sprites, 'sprites.js')}</script>`,
+  `<script id="wp-engine-painted">\n${scriptSafe(painted, 'painted-io.js')}</script>`,
   `<script id="wp-engine">\n${scriptSafe(engine, 'engine.js')}</script>`,
   `<script>window.WP_EXAMPLES = ${scriptSafe(examplesJson, 'the examples')};</script>`,
   `<script>\n${scriptSafe(app, 'the page’s scripts')}</script>`,

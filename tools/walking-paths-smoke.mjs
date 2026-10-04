@@ -4,8 +4,10 @@
 // Walking-Paths.html straight from disk the way you would, and works through it: the examples,
 // drawing by tapping and by tracing, undo, the magic wand on a made-up picture, people, things,
 // ways out between maps, walking (and walking through a way out), every file it saves, opening a
-// maps file, and that the work is still there after a reload. Then the artifact page inside a
-// locked-down frame, as the artifact host shows it. Screenshots go to build/walking-paths-smoke/.
+// maps file, and that the work is still there after a reload. Then a world map made from four
+// pictures at once, walked with the painted Io, the camera and speed sliders, and Picture size.
+// Then the artifact page inside a locked-down frame, as the artifact host shows it. Screenshots go
+// to build/walking-paths-smoke/.
 //
 //   node tools/walking-paths-smoke.mjs        (must end with "all good")
 
@@ -361,6 +363,126 @@ check(!errors.length, 'still no errors' + (errors.length ? ': ' + errors.join(' 
 await ctx.close();
 
 // =================================================================================================
+console.log('A world map from four pictures, walked with the painted Io');
+({ ctx, page, errors } = await open(FILE_URL, { width: 1280, height: 800 }, false));
+await ready(page);
+{
+  // a big world map (an island with crossing roads) and three smaller places
+  const pics = await page.evaluate(() => {
+    const make = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c.toDataURL('image/png').split(',')[1]; };
+    const world = make(3600, 2400, (g, w, h) => {
+      g.fillStyle = '#1c3550'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#5c7a3a'; g.beginPath(); g.ellipse(w / 2, h / 2, w * 0.4, h * 0.38, 0, 0, Math.PI * 2); g.fill();
+      for (let i = 0; i < 4000; i++) { g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect((i * 997) % w, (i * 613) % h, 6, 6); }
+      g.strokeStyle = '#c9a36a'; g.lineWidth = 30; g.beginPath(); g.moveTo(w * 0.2, h * 0.5); g.lineTo(w * 0.8, h * 0.5); g.moveTo(w / 2, h * 0.2); g.lineTo(w / 2, h * 0.8); g.stroke();
+    });
+    const place = (col) => make(900, 600, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h); g.fillStyle = '#c9a36a'; g.fillRect(0, 250, w, 100); g.fillRect(400, 0, 100, h); for (let i = 0; i < 900; i++) { g.fillStyle = 'rgba(0,0,0,0.07)'; g.fillRect((i * 97) % w, (i * 61) % h, 4, 4); } });
+    return { world, town: place('#3a2f4a'), forest: place('#1f3a1c'), harbour: place('#1c2f3a') };
+  });
+  const png = (name, b64) => ({ name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') });
+  await page.setInputFiles('#wp-file-pictures', [png('world-map.png', pics.world), png('town.png', pics.town), png('forest.png', pics.forest), png('harbour.png', pics.harbour)]);
+  await page.waitForSelector('#wp-dialog:not([hidden])', { timeout: 20000 });
+  const asked = await page.$$eval('#wp-dialog-more input', (a) => a.map((i) => [i.type, i.value, i.checked]));
+  check(asked.filter((a) => a[0] === 'radio').length === 5 && asked.some((a) => a[1] === 'world-map' && a[2]), 'adding four pictures asks which is the world map (the one called world map is picked already)');
+  check(asked.some((a) => a[0] === 'checkbox' && a[2]), 'and offers to make the big one smaller');
+  await page.screenshot({ path: path.join(OUT, '30-world-question.png') });
+  await page.click('#wp-dialog-buttons button');
+  await page.waitForFunction(() => WalkingPaths.S.cur === 'world', null, { timeout: 30000 }).catch(() => {});
+  const w = await state(page, () => {
+    const S = WalkingPaths.S, world = S.maps.world;
+    if (!world) return null;
+    return {
+      kind: world.kind, size: world.size, pic: world.pic,
+      places: (world.places || []).map((p) => [p.id, p.to, p.at, p.arrive]),
+      backs: ['town', 'forest', 'harbour'].map((k) => S.maps[k].exits.filter((e) => e.to === 'world').map((e) => [e.at, e.rect])),
+      sizes: ['town', 'forest', 'harbour'].map((k) => S.maps[k].size),
+    };
+  });
+  check(!!w && w.kind === 'world', 'the picked picture becomes the world map, its key “world” as in Envoi');
+  check(!!w && w.places.length === 3 && ['town', 'forest', 'harbour'].every((k) => w.places.some((p) => p[1] === k && Array.isArray(p[3]))), 'the other three are places on it, each leading into its map');
+  check(!!w && w.backs.every((b, i) => b.length === 1 && b[0][0] === w.places.find((p) => p[1] === ['town', 'forest', 'harbour'][i])[0]), 'and each of them has a way back out to its own place on the world map');
+  check(!!w && w.pic.w <= 3072 && w.pic.type === 'image/webp' && w.size[0] === 3600 && w.size[1] === 2400, 'the world map’s picture is smaller now (' + (w && w.pic.w + ' × ' + w.pic.h + ' ' + w.pic.type) + '), the map still 3600 × 2400');
+  await page.screenshot({ path: path.join(OUT, '31-world-map.png') });
+
+  // walking: to the town's flag, into the town, out of its way back, onto the world map again
+  await page.click('#wp-walk');
+  await page.waitForFunction(() => WalkingPaths.field() && WalkingPaths.field().mapId === 'world', null, { timeout: 10000 });
+  await page.waitForFunction(() => WalkingPaths.field().drawn === 'io-painted', null, { timeout: 10000 }).catch(() => {});
+  check(await state(page, () => WalkingPaths.field().drawn === 'io-painted'), 'the painted Io from Envoi walks (the paper doll)');
+  const town = w.places.find((p) => p[1] === 'town');
+  await state(page, (at) => WalkingPaths.field().walkTo(at[0], at[1]), town[2]);
+  await page.waitForFunction(() => /Go to Town/.test(document.querySelector('.wpe-act').textContent) && !document.querySelector('.wpe-act').hidden, null, { timeout: 20000 }).catch(() => {});
+  check(await page.isVisible('.wpe-act:has-text("Go to Town")'), 'at the town’s flag the gold button says Go to Town');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(OUT, '32-world-walk.png') });
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => WalkingPaths.field().mapId === 'town', null, { timeout: 10000 }).catch(() => {});
+  const inTown = await state(page, () => ({ id: WalkingPaths.field().mapId, cur: WalkingPaths.S.cur, at: [WalkingPaths.field().me.x, WalkingPaths.field().me.y] }));
+  check(inTown.id === 'town' && Math.hypot(inTown.at[0] - town[3][0], inTown.at[1] - town[3][1]) < 2, 'Enter takes her into the town, where the place says she arrives');
+  check(inTown.cur === 'town' && (await page.inputValue('#wp-map-name')) === 'Town', 'and the panel follows her to the town');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(OUT, '33-town-walk.png') });
+  const door = w.backs[0][0][1];
+  await state(page, (r) => WalkingPaths.field().walkTo((r[0] + r[2]) / 2, (r[1] + r[3]) / 2), door);
+  await page.waitForFunction(() => WalkingPaths.field().mapId === 'world', null, { timeout: 15000 }).catch(() => {});
+  const back = await state(page, () => ({ id: WalkingPaths.field().mapId, at: [WalkingPaths.field().me.x, WalkingPaths.field().me.y] }));
+  check(back.id === 'world' && Math.hypot(back.at[0] - town[2][0], back.at[1] - town[2][1]) < 2, 'its way out (a map with no walk areas yet is all ground) brings her back to the town’s flag');
+
+  // how close the camera is and how fast she walks, changed while she walks
+  await page.waitForTimeout(400);
+  const z0 = await state(page, () => WalkingPaths.field().cam.z);
+  await page.fill('#wp-map-zoom', '2');
+  await page.dispatchEvent('#wp-map-zoom', 'input');
+  await page.dispatchEvent('#wp-map-zoom', 'change');
+  await page.waitForTimeout(200);
+  const z1 = await state(page, () => WalkingPaths.field().cam.z);
+  check(Math.abs(z1 / z0 - 2) < 0.05 && (await state(page, () => WalkingPaths.S.maps.world.zoom)) === 1.4, 'the camera slider brings the camera twice as close at once (' + z0.toFixed(2) + ' → ' + z1.toFixed(2) + ')');
+  await page.fill('#wp-map-pace', '4');
+  await page.dispatchEvent('#wp-map-pace', 'input');
+  await page.dispatchEvent('#wp-map-pace', 'change');
+  await page.dispatchEvent('#wp-map-pace', 'pointerup');
+  check(await state(page, () => WalkingPaths.S.maps.world.pace === 4 && WalkingPaths.field().map.pace === 4), 'and the speed slider makes her walk faster');
+  await page.waitForTimeout(50);
+  check(await state(page, () => document.activeElement.id !== 'wp-map-pace'), 'letting go of a slider gives the keys back to the walk');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check(await state(page, () => !WalkingPaths.S.walking && WalkingPaths.S.cur === 'world'), 'Esc goes back to editing the world map');
+
+  // picture size, on the town
+  await page.click('.wp-maps li:has-text("Town") .wp-map-pick');
+  await page.click('#wp-picture-size');
+  await page.waitForFunction(() => document.querySelectorAll('#wp-shrink-options button.wp-size').length === 6, null, { timeout: 30000 }).catch(() => {});
+  const cards = await page.$$eval('#wp-shrink-options button.wp-size', (a) => a.map((b) => b.textContent));
+  check(cards.length === 6 && cards.every((t) => /\d+ × \d+/.test(t) && /(KB|MB|bytes)/.test(t) && /Detail kept\d+%/.test(t) && /Memory\d+ MB/.test(t)), 'Picture size shows the original and five smaller sizes, each with its file size, detail kept and memory');
+  await page.click('#wp-shrink-options button[data-size="50"]');
+  await page.dispatchEvent('#wp-shrink-hold', 'pointerdown', { pointerId: 5 });
+  check(/Original.*holding/.test(await page.textContent('#wp-shrink-label')), 'holding the button shows the original');
+  await page.dispatchEvent('#wp-shrink-hold', 'pointerup', { pointerId: 5 });
+  check(/^50%/.test(await page.textContent('#wp-shrink-label')), 'letting go shows the size picked again');
+  await page.click('#wp-shrink-close-up');
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(OUT, '34-picture-size.png') });
+  await page.click('#wp-shrink-use');
+  await page.waitForSelector('#wp-shrink', { state: 'hidden', timeout: 20000 }).catch(() => {});
+  const shrunk = await state(page, () => { const m = WalkingPaths.S.maps.town; return { w: m.pic.w, h: m.pic.h, type: m.pic.type, size: m.size, exit: m.exits[0].rect }; });
+  check(shrunk.w === 450 && shrunk.h === 300 && shrunk.size[0] === 900 && shrunk.size[1] === 600 && shrunk.exit[0] === w.backs[0][0][1][0], 'Use this size: the town’s picture is half as wide, the map and everything on it unchanged');
+  await page.keyboard.press('Control+z');
+  check(await state(page, () => WalkingPaths.S.maps.town.pic.w === 900), 'and Undo puts the old picture back');
+
+  // the maps file keeps the world map, and the walk-around page has the painted Io
+  const file = JSON.parse(fs.readFileSync(await saved(page, '#wp-save'), 'utf8'));
+  check(file.maps.world.kind === 'world' && file.maps.world.places.length === 3 && file.maps.world.zoom === 1.4 && file.maps.world.pace === 4 && file.maps.town.exits[0].to === 'world' && typeof file.maps.town.exits[0].at === 'string', 'the maps file keeps the world map, its places, its camera and speed, and the ways back');
+  const walkFile = await saved(page, '#wp-save-page');
+  check(/makePaintedIo/.test(fs.readFileSync(walkFile, 'utf8')), 'the walk-around page has the painted Io in it');
+  const w2 = await open(pathToFileURL(walkFile).href, { width: 900, height: 600 }, false, ctx);
+  await w2.page.waitForTimeout(1500);
+  check(!w2.errors.length && (await w2.page.textContent('.wpe-plate')) === 'Town', 'and it walks' + (w2.errors.length ? ': ' + w2.errors.join(' | ') : ''));
+  await w2.page.close();
+  check(!errors.length, 'no errors with the world map' + (errors.length ? ': ' + errors.join(' | ') : ''));
+}
+await ctx.close();
+
+// =================================================================================================
 console.log('On a phone (390 x 844, touch)');
 ({ ctx, page, errors } = await open(FILE_URL, { width: 390, height: 844 }, true));
 await ready(page);
@@ -402,6 +524,12 @@ check(q1 < q0 - 10, 'holding the d-pad’s left arrow walks her left');
 await page.tap('.wpe-menu');
 await page.waitForTimeout(300);
 check(await state(page, () => !WalkingPaths.S.walking), '“Back to editing” ends the walk');
+// picture size fits a phone too
+await page.tap('#wp-picture-size');
+await page.waitForFunction(() => document.querySelectorAll('#wp-shrink-options button.wp-size').length === 6, null, { timeout: 30000 }).catch(() => {});
+await page.screenshot({ path: path.join(OUT, '13-phone-picture-size.png') });
+check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.querySelector('.wp-shrink-card').getBoundingClientRect().right <= window.innerWidth), 'Picture size fits on the phone');
+await page.tap('#wp-shrink-cancel');
 check(!errors.length, 'no errors on the phone' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 

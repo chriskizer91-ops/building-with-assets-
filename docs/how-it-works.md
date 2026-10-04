@@ -97,7 +97,8 @@ CDN files from a folder (for machines that can't reach the CDN).
 
 ## Walking Paths
 
-`walking-paths/` is a separate tool that shares nothing with the console at run time: Envoi on the Longest
+`editing-tools/` holds tools for making the games, each one built into a single page. The first is
+`editing-tools/walking-paths/`, a separate tool that shares nothing with the console at run time: Envoi on the Longest
 Night's walking-path page (`envoi-game-pass-3/map-paths/` in that repository), rebuilt to work with any picture.
 `tools/build-walking-paths.mjs` bundles it (esbuild) into one page with everything inside: `Walking-Paths.html`
 to keep and open, and `walking-paths.html`, the same page without a `<head>`, to publish as a Claude artifact.
@@ -110,20 +111,46 @@ Like Mooncart it never loads anything from the internet.
 | `js/editor.js` | the canvas: looking round (drag, wheel, two fingers), hit testing, dragging points and shapes, drawing by taps and by tracing, the wand, putting down ways out, people, things and story areas, drawing it all |
 | `js/panel.js` | the panel: tools, the picked thing's form, the maps list and the picked map's settings, layers and the reach report, the in-page question box |
 | `js/wand.js` | the magic wand (below) |
-| `js/files.js` | adding pictures, opening maps files, and every file it saves |
+| `js/files.js` | adding pictures (and the question after: which is the world map, make big ones smaller), opening maps files, and every file it saves |
+| `js/shrink.js` | Picture size: smaller copies of a picture, with their file sizes, detail kept and memory |
 | `js/walk.js`, `js/check.js` | "Walk it", and the reach check and stand test, both through the engine |
 | `engine/engine.js` | the walk engine, one plain script: Envoi's field (`src/game/field.js` there) for any map size |
 | `engine/sprites.js` | Io and the town folk as pixel sprites, copied unchanged from Envoi (`src/walk/pixel-io.js`, `src/game/sprites.js`) |
+| `engine/painted-io.js` | the painted Io (a paper doll cut into strips that sway as she walks), copied unchanged from Envoi (`src/walk/painted-io.js`): change it there |
 | `examples/` | Wickhollow and its jetty from Envoi (`src/game/maps.js` and their paintings), the maps it starts with |
 
-**The maps file** is Envoi's `MAPS` (`src/game/maps.js`) with two more fields, so its maps drop into a game built
+**The maps file** is Envoi's `MAPS` (`src/game/maps.js`) with a few more fields, so its maps drop into a game built
 the same way: `{ format: "walking-paths", version: 1, about, maps: { key: map } }`, each map
-`{ name, src, size: [w, h], walker, start, walk, block, front: [{ pts, base }], exits: [{ rect, to, at, label }],
-people: [{ id, name, at, look, face0, says }], spots: [things { kind, label, note, at } or story areas
-{ kind, id, label, note, rect }] }`. Points are whole pixels of the map, `size` is the map's size (the picture's,
-unless changed: Envoi's are 1536 x 1024) and `walker` is how tall people are. Any other field a map had when it was
-opened is kept as it was (Envoi's `band`, `music`, `wild`, people's `talk` and `role`...). `src` is the picture as a
-`data:` address in the maps file and the walk-around page, or its file name in "the map data only".
+`{ name, kind, src, size: [w, h], walker, zoom, pace, start, walk, block, front: [{ pts, base }],
+exits: [{ rect, to, at, label }], people: [{ id, name, at, look, face0, says }], spots: [things
+{ kind, label, note, at } or story areas { kind, id, label, note, rect }], places }`. Points are whole pixels of the
+map, `size` is the map's size (the picture's, unless changed: Envoi's are 1536 x 1024) and `walker` is how tall
+people are. `zoom` (how close the camera is, Envoi's numbers: 0.7 is normal) and `pace` (walking speed, in her own
+heights a second; 1.7 is normal) are only there when changed. Any other field a map had when it was opened is kept
+as it was (Envoi's `band`, `music`, `wild`, people's `talk` and `role`...). `src` is the picture as a `data:`
+address in the maps file and the walk-around page, or its file name in "the map data only".
+
+**The world map** is a map with `kind: "world"` (its key becomes `world` when that is free, as in Envoi) and
+`places: [{ id, name, at, to, arrive }]`: a place at `at` leads into map `to`, where she arrives at `arrive`. A way
+out back to the world map names its place, Envoi's way: `{ to: "world", at: "<place id>" }`, and she comes out at
+that place. Putting a map on the world map (`putOnWorld` in `project.js`) uses a way out to the world it has already,
+or makes one at its edge (on a walk area's edge along the picture's edge, else the bottom middle), and sets `arrive`
+just inside it. Adding several pictures at once asks which is the world map and puts the others round its middle
+(`connectAll`). On a walk the places are things to use ("Go to …"). A map with no walk areas at all is open ground,
+so a world map, or any picture just added, can be walked before anything is drawn on it.
+
+**On a walk** the camera is Envoi's: the walker is 15% of the screen's shorter side, times `zoom / 0.7`; speed is
+`pace x walker` pixels a second (rising to half as fast again once she has walked for a second or so). Who walks is the painted Io
+unless *Who walks* says otherwise; she is drawn `walker` pixels tall. The walk-around page carries
+`painted-io.js` (240 KB) only when she is the one walking.
+
+**Picture size** makes a map's picture smaller without touching the map: `size` and every point stay, the picture
+just has fewer pixels to stretch over it (`pic.w`, `pic.h`). The sizes are 100, 83, 75, 67 and 50% in WebP (JPEG
+where the browser can't write WebP; no browser's canvas writes AVIF yet). "Detail kept" is the mean SSIM, on 8 x 8
+blocks of grey, of the four busiest 160-pixel patches of a 4 x 4 grid, the smaller copy scaled back up against the
+original. "Memory" is width x height x 4 bytes, plus a third for the smaller copies a graphics card keeps. When
+pictures are added, ones over 1.5 MB or 3072 pixels on the longest side can be cut to 3072 (kept only when that
+saves a fifth or more). Each change is one undo step; the old picture stays in the store until the page is next opened.
 
 **One set of rules.** The engine is the only place that says where she can stand: a point is free inside a walk
 area, outside every block and away from people; she stands where the point and the points a foot to each side are
@@ -145,5 +172,6 @@ The work in progress is kept in IndexedDB (database `walking-paths`), which a pr
 browser's data loses: the page says so and points to the maps file.
 
 `node tools/walking-paths-smoke.mjs` builds it and checks it in Chromium (ending with "all good"): from disk on a
-laptop and a phone, then as the artifact page inside a locked-down frame. The workflow `walking-paths.yml` runs it
+laptop (with a world map made from four pictures, walked with the painted Io, and Picture size) and a phone, then
+as the artifact page inside a locked-down frame. The workflow `walking-paths.yml` runs it
 and puts `Walking-Paths.html` on the Releases page under the tag `walking-paths`, so its download link stays the same.

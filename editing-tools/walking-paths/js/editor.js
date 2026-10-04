@@ -5,7 +5,7 @@
 import { S, map, mapSize, remember, dropLast, emit, on, changed } from './state.js';
 import { bbox, area, inPoly, inRect, nearestOnEdges, smooth, simplify, simplifyLine, clean, snap, onEdge } from './geom.js';
 import { pictureImage } from './pictures.js';
-import { arrivalsInto, mapName } from './project.js';
+import { arrivalsInto, mapName, isWorld, putOnWorld } from './project.js';
 import { reachNow, canStand } from './check.js';
 import { wand } from './wand.js';
 import { $, clamp, cap, plural } from './util.js';
@@ -23,7 +23,7 @@ const rgba = (hex, a) => {
 
 export const SHAPES = ['walk', 'block', 'front'];
 export const isShape = (k) => SHAPES.includes(k);
-export const NOUN = { walk: 'walk area', block: 'block', front: 'front', exit: 'way out', person: 'person', thing: 'thing', story: 'story area' };
+export const NOUN = { walk: 'walk area', block: 'block', front: 'front', exit: 'way out', person: 'person', thing: 'thing', story: 'story area', place: 'place' };
 
 // ---------------------------------------------------------------------------------------------
 // looking round: view.x, view.y is the map point at the top left, view.z screen pixels per map pixel
@@ -108,7 +108,12 @@ export const shapeOf = (m, kind, i) => (kind === 'front' ? m.front[i].pts : m[ki
 export function pointOf(m, s) {
   if (s.kind === 'person') return m.people[s.i].at;
   if (s.kind === 'spot') return m.spots[s.i].at;
-  if (s.kind === 'arrival') { const a = arrivalsInto(S.cur)[s.i]; return a ? S.maps[a.from].exits[a.exit].at : null; }
+  if (s.kind === 'place') return m.places[s.i].at;
+  if (s.kind === 'arrival') {
+    const a = arrivalsInto(S.cur)[s.i];
+    if (!a) return null;
+    return a.place != null ? S.maps[a.from].places[a.place].arrive : S.maps[a.from].exits[a.exit].at;
+  }
   return m.start;
 }
 const rectOf = (m, s) => (s.kind === 'exit' ? m.exits[s.i].rect : m.spots[s.i].rect);
@@ -120,6 +125,7 @@ export function valid(s) {
   if (s.kind === 'person') return s.i < m.people.length;
   if (s.kind === 'spot') return s.i < m.spots.length;
   if (s.kind === 'arrival') return s.i < arrivalsInto(S.cur).length;
+  if (s.kind === 'place') return isWorld(m) && s.i < (m.places || []).length;
   return s.kind === 'start';
 }
 // the maps a change to `s` touches (an arrival belongs to the map whose way out it is)
@@ -160,6 +166,7 @@ function hitAt(p, touchy) {
     m.spots.forEach((q, i) => { if (!q.rect) dot(q.at, { kind: 'spot', i }); });
   }
   if (L.exits) {
+    if (isWorld(m)) (m.places || []).forEach((q, i) => dot(q.at, { kind: 'place', i }));
     arrivalsInto(S.cur).forEach((a, i) => dot(a.at, { kind: 'arrival', i }));
     dot(m.start, { kind: 'start', i: 0 });
   }
@@ -228,6 +235,7 @@ cv.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
   const base = { id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, start: p, live: false, touchy };
   if (S.tool === 'select') startPick(p, base);
+  else if (S.tool === 'place') act = Object.assign(base, { type: 'place' });
   else if (isShape(S.tool)) act = Object.assign(base, { type: S.drawBy === 'wand' ? 'wand' : 'draw', stroke: null });
   else if (S.tool === 'exit' || S.tool === 'story') act = Object.assign(base, { type: 'rect', cur: p });
   else act = Object.assign(base, { type: 'place' });
@@ -608,6 +616,7 @@ function makeRect(kind, drag, p) {
 
 function place(kind, p) {
   const m = map(), q = snapPt(p.x, p.y);
+  if (kind === 'place') { putPlace(q); return; }
   remember();
   if (kind === 'person') {
     m.people.push({ id: freeId(m.people.map((x) => x.id), 'person'), name: 'Person ' + (m.people.length + 1), at: q, look: 'hooded' });
@@ -621,16 +630,44 @@ function place(kind, p) {
   changed(kind === 'person' ? 'Person added. Name them in the panel.' : 'Thing added. Say what it is in the panel.');
 }
 
+// a place on the world map: for the map picked in the panel's list (with a way back made on that
+// map), or a new one to say where it leads
+function putPlace(q) {
+  const m = map();
+  if (!isWorld(m)) return;
+  const target = S.placeFor && S.maps[S.placeFor] && S.placeFor !== S.cur ? S.placeFor : null;
+  S.placeFor = null;
+  if (target) {
+    const i = putOnWorld(S.cur, target, q);
+    S.sel = { kind: 'place', i };
+    setTool('select');
+    emit('picked');
+    changed(mapName(target) + ' is on the world map. Its way out back here is on ' + mapName(target) + ' (blue): move it to where she should leave.');
+    return;
+  }
+  remember();
+  if (!Array.isArray(m.places)) m.places = [];
+  const taken = new Set(m.places.map((x) => x.id));
+  let n = m.places.length + 1;
+  while (taken.has('place-' + n)) n++;
+  m.places.push({ id: 'place-' + n, name: 'Place ' + n, at: q, to: '', arrive: null });
+  S.sel = { kind: 'place', i: m.places.length - 1 };
+  setTool('select');
+  emit('picked');
+  changed('Place added. Say which map it leads into, in the panel.');
+}
+
 // ---------------------------------------------------------------------------------------------
 // tools and the picked thing
 
 export function setTool(t) {
   if (S.draft && t !== S.tool) { S.draft = null; marks.length = 0; }
   S.tool = t;
+  if (t !== 'place') S.placeFor = null;
   if (t !== 'select') {
     S.sel = null;
     S.hover = null;
-    const layer = isShape(t) ? t : t === 'exit' ? 'exits' : 'people';
+    const layer = isShape(t) ? t : t === 'exit' || t === 'place' ? 'exits' : 'people';
     if (!S.layers[layer]) { S.layers[layer] = true; emit('layers'); }
   }
   emit('tool');
@@ -656,6 +693,7 @@ export function deletePicked() {
   if (isShape(s.kind)) { (s.kind === 'front' ? m.front : m[s.kind]).splice(s.i, 1); what = NOUN[s.kind]; }
   else if (s.kind === 'exit') { m.exits.splice(s.i, 1); what = 'way out'; }
   else if (s.kind === 'person') { what = m.people[s.i].name || 'person'; m.people.splice(s.i, 1); }
+  else if (s.kind === 'place') { what = m.places[s.i].name || 'place'; m.places.splice(s.i, 1); }
   else { what = m.spots[s.i].rect ? 'story area' : 'thing'; m.spots.splice(s.i, 1); }
   pick(null);
   changed(cap(what) + ' deleted. Undo brings it back.');
@@ -717,8 +755,9 @@ function nudge(dx, dy) {
 
 const held = new Set(), ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 window.addEventListener('keydown', (e) => {
+  if ($('wp-dialog').hidden === false || $('wp-shrink').hidden === false) return; // a question is open
   if (e.key === 'F2') { e.preventDefault(); emit('walk'); return; }
-  if (S.walking || $('wp-dialog').hidden === false) return;
+  if (S.walking) return;
   const t = e.target && e.target.tagName;
   if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
   const ctrl = e.ctrlKey || e.metaKey, k = e.key && e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -877,8 +916,10 @@ function paint() {
     g.strokeRect(sx(r[0]), sy(r[1]), (r[2] - r[0]) * z, (r[3] - r[1]) * z);
     if (on) handles(r, sx, sy);
     const x0 = sx(r[0]), y0 = sy(r[1]), x1 = sx(r[2]), y1 = sy(r[3]);
-    const where = e.to ? (S.maps[e.to] ? mapName(e.to) : e.to + ' (not here)') : 'nowhere yet';
-    labels.push({ text: '→ ' + (e.label && S.maps[e.to] ? e.label : where), color: C.exit, pri: on || hv ? 0 : 2, ax: (x0 + x1) / 2, ay: (y0 + y1) / 2,
+    let where = e.to ? (S.maps[e.to] ? mapName(e.to) : e.to + ' (not here)') : 'nowhere yet';
+    if (isWorld(S.maps[e.to])) { const pl = (S.maps[e.to].places || []).find((x) => x.id === e.at); where = mapName(e.to) + (pl ? ' (' + pl.name + ')' : ''); }
+    else if (e.label && S.maps[e.to]) where = e.label;
+    labels.push({ text: '→ ' + where, color: C.exit, pri: on || hv ? 0 : 2, ax: (x0 + x1) / 2, ay: (y0 + y1) / 2,
       cands: (w) => [[x0, y1 + 3], [x0, y0 - 19], [x1 - w, y1 + 3], [x1 - w, y0 - 19], [x0 - w - 4, y0], [x1 + 4, y0], [x0 + 3, y0 + 3]] });
   });
   if (L.people) m.spots.forEach((s, i) => {
@@ -924,8 +965,9 @@ function paint() {
     if (q) { g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.strokeRect(sx(q[0]) - 5, sy(q[1]) - 5, 10, 10); }
   }
   // where people arrive, and where a walk starts (with someone standing there, to show how big people are)
+  if (L.exits && isWorld(m)) (m.places || []).forEach((q, i) => flag(q, isSel('place', i), isHov('place', i), sx, sy, labels));
   if (L.exits) {
-    arrivalsInto(S.cur).forEach((a, i) => ring(a.at, C.arrive, isSel('arrival', i), isHov('arrival', i), z >= 0.5 || isSel('arrival', i) || isHov('arrival', i) ? 'from ' + mapName(a.from) : '', sx, sy, labels));
+    arrivalsInto(S.cur).forEach((a, i) => ring(a.at, C.arrive, isSel('arrival', i), isHov('arrival', i), z >= 0.5 || isSel('arrival', i) || isHov('arrival', i) ? (a.place != null ? 'from the world map' : 'from ' + mapName(a.from)) : '', sx, sy, labels));
     const sheet = walkerSheet(), st = m.start;
     if (sheet) {
       const k = (m.walker * z) / 42, [fx, fy] = sheet.frame('s', 0);
@@ -1044,6 +1086,18 @@ function handles(r, sx, sy) {
     g.fillStyle = '#000000'; g.fillRect(sx(x) - 5, sy(y) - 5, 10, 10);
     g.fillStyle = '#ffffff'; g.fillRect(sx(x) - 4, sy(y) - 4, 8, 8);
   }
+}
+// a place on the world map: a gold flag, its name, and where it leads
+function flag(q, on, hov, sx, sy, labels) {
+  const x = sx(q.at[0]), y = sy(q.at[1]), s = on || hov ? 1.25 : 1;
+  g.lineWidth = 2;
+  g.strokeStyle = '#000000';
+  g.fillStyle = on ? '#ffffff' : C.gold;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 26 * s); g.stroke();
+  g.beginPath(); g.moveTo(x, y - 26 * s); g.lineTo(x + 16 * s, y - 20 * s); g.lineTo(x, y - 14 * s); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.arc(x, y, 4 * s, 0, Math.PI * 2); g.fill(); g.stroke();
+  const to = q.to && S.maps[q.to] ? '' : q.to ? ' (' + q.to + ', not here)' : ' (leads nowhere yet)';
+  labels.push({ text: q.name + to, color: C.gold, pri: on || hov ? 0 : 1, ax: x, ay: y, dot: true, cands: around(x + 8, y - 18) });
 }
 function ring(p, col, on, hov, label, sx, sy, labels) {
   const x = sx(p[0]), y = sy(p[1]);

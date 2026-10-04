@@ -23,6 +23,7 @@ export async function startWalk() {
   $('wp-note').hidden = true;
   $('wp-stage').classList.add('is-walking');
   emit('walking');
+  let left = false;
   field = window.WalkingPathsEngine.create(host, {
     maps: engineMaps(),
     picture: (k) => (S.maps[k] && S.maps[k].pic ? pictureURL(S.maps[k].pic.key) : null),
@@ -31,6 +32,14 @@ export async function startWalk() {
     menuLabel: '✎ Back to editing',
     onMenu: stopWalk,
     onEscape: stopWalk,
+    // through a way out: the panel shows the map she is on now, so its sliders tune that one
+    onMap: (k) => {
+      if (!S.walking || !S.maps[k] || k === S.cur) return;
+      if (!left) { ed.keepView(); left = true; }
+      S.cur = k;
+      S.sel = null;
+      emit('maps');
+    },
   });
   const f = field;
   try {

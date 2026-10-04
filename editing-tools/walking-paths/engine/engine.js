@@ -3,13 +3,19 @@
    the same grid and path finding, the same sliding along walls, and fronts (pieces of the
    painting) drawn over whoever walks behind them. Ways out lead to the other maps of the set.
 
+   A world map (kind "world") has places, each leading into another map; a way out whose `at` is
+   a place's id comes out at that place on the world map. A map with no walk areas yet (a world
+   map, or a picture just added) can be walked anywhere. Each map can set how close the camera is
+   (`zoom`, Envoi's numbers: 0.7 is normal) and how fast she walks (`pace`, her heights a second).
+
    It is one plain script with nothing to load, so Walking Paths can put a copy of it inside every
-   walk-around page it saves. It needs sprites.js (the pixel people) before it.
+   walk-around page it saves. It needs sprites.js (the pixel people) before it, and painted-io.js
+   for the painted Io.
 
      const field = WalkingPathsEngine.create(hostElement, {
-       maps,                  // { id: map } in the maps file's shape (see walking-paths/README in docs)
+       maps,                  // { id: map } in the maps file's shape (see docs/how-it-works.md)
        picture: (id) => url,  // where each map's picture is (default: map.src)
-       walker: 'io',          // 'io' or one of the folk looks
+       walker: 'io-painted',  // 'io-painted', 'io' (in pixels) or one of the folk looks
        showPaths: false,      // draw the walk areas, blocks and ways out while walking
        menuLabel, onMenu,     // the button at the top left
        onNote: (text) => {},  // something happened (a way out to nowhere, a story area)
@@ -54,20 +60,24 @@
   // A point is free when it is inside a walk area, outside every block and not where someone
   // stands; she can stand at a point when it and the points a foot to each side are free.
   function standTest(map) {
-    const z = sizes(map);
+    const z = sizes(map), [W, H] = sizeOf(map);
     const shapes = (list) => (list || []).filter((p) => Array.isArray(p) && p.length >= 3).map((p) => [bboxOf(p), p]);
     const walk = shapes(map.walk), block = shapes(map.block);
     const people = (map.people || []).filter((p) => p && !p.hidden && isPt(p.at));
+    const open = !walk.length; // no walk areas yet: the whole map is ground
     function free(x, y) {
-      let inside = false;
-      for (const [b, p] of walk) if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] && inPoly(p, x, y)) { inside = true; break; }
-      if (!inside) return false;
+      if (open) { if (x < 0 || y < 0 || x > W || y > H) return false; }
+      else {
+        let inside = false;
+        for (const [b, p] of walk) if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] && inPoly(p, x, y)) { inside = true; break; }
+        if (!inside) return false;
+      }
       for (const [b, p] of block) if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] && inPoly(p, x, y)) return false;
       for (const q of people) if (Math.abs(q.at[0] - x) < z.personW && Math.abs(q.at[1] - y) < z.personH) return false;
       return true;
     }
     const stand = (x, y) => free(x, y) && free(x - z.foot, y) && free(x + z.foot, y);
-    return { free, stand, sizes: z };
+    return { free, stand, sizes: z, open };
   }
 
   // The map in cells: a cell is open when she can stand at its middle and a little way off it in
@@ -129,6 +139,18 @@
     (map.spots || []).forEach((s, i) => {
       if (Array.isArray(s.rect)) { if (!nearRect(s.rect)) add('spot', i, mid(s.rect), 'She can’t reach the story area ' + (s.label || s.id || '') + '.'); }
       else if (isPt(s.at) && !nearPoint(s.at[0], s.at[1], z.near)) add('spot', i, s.at, 'She can’t get near enough to ' + (s.label || s.kind || 'a thing') + '.');
+    });
+    if (map.kind === 'world') (map.places || []).forEach((p, i) => {
+      if (isPt(p.at) && !nearPoint(p.at[0], p.at[1], z.near)) add('place', i, p.at, 'She can’t get near enough to ' + (p.name || p.id || 'a place') + ' on the world map.');
+    });
+    // where she comes in from the world map's places
+    for (const from of Object.keys(maps)) if (maps[from].kind === 'world') (maps[from].places || []).forEach((p, pi) => {
+      if (p.to !== id || !isPt(p.arrive)) return;
+      const [k, d] = nearestOpen(p.arrive[0], p.arrive[1]), who = 'Coming from the world map, she';
+      for (const x of map.exits || []) if (Array.isArray(x.rect) && inRect(x.rect, p.arrive[0], p.arrive[1], z.exitPad)) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive inside the way out to ' + (x.label || placeName(x.to)) + ', and leave again at once.');
+      if (k < 0) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive where there is no walk area at all.');
+      else if (d > z.side) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive ' + Math.round(d) + ' px off the walk areas.');
+      else if (!seen[k]) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive cut off from the rest of the map.');
     });
     // where she comes in from the other maps' ways out
     for (const from of Object.keys(maps)) (maps[from].exits || []).forEach((e, ei) => {
@@ -303,7 +325,8 @@
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
-    // who walks
+    // who walks: the painted Io (a paper doll), or a pixel sprite (Io, or one of the folk)
+    const painted = () => (opts.walker === 'io-painted' ? paintedIo() : null);
     const sheets = {};
     const sheetFor = (look) => {
       if (sheets[look]) return sheets[look];
@@ -314,7 +337,7 @@
       } catch { s = null; }
       return (sheets[look] = s);
     };
-    const me = { x: 0, y: 0, dir: 's', walkT: 0, moving: false, run: 0, vx: 0, vy: 0, blocked: 0 };
+    const me = { x: 0, y: 0, dir: 's', walkT: 0, walk: 0, lean: 0, turn: 0, moving: false, run: 0, vx: 0, vy: 0, blocked: 0 };
 
     let map = null, mapId = null, pic = null, rules = null, G = null, route = null, aim = null, inExit = null, inStory = null, busy = false, stopped = false;
     let fadeIn = 0, showPaths = !!opts.showPaths;
@@ -357,6 +380,7 @@
       const out = [];
       for (const p of map.people || []) if (isPt(p.at) && !p.hidden) out.push({ kind: 'person', ref: p, x: p.at[0], y: p.at[1], label: 'Talk to ' + (p.name || 'them') });
       for (const s of map.spots || []) if (!Array.isArray(s.rect) && isPt(s.at)) out.push({ kind: 'thing', ref: s, x: s.at[0], y: s.at[1], label: s.label ? (s.kind === 'rest' ? 'Rest: ' : 'Look: ') + s.label : s.kind || 'Look' });
+      if (map.kind === 'world') for (const p of map.places || []) if (isPt(p.at)) out.push({ kind: 'place', ref: p, x: p.at[0], y: p.at[1], label: 'Go to ' + (p.name || p.id || 'this place') });
       return out;
     }
     function nearest() {
@@ -371,6 +395,7 @@
       keys.clear(); padDirs.clear(); route = null; aim = null;
       const dx = t.x - me.x, dy = t.y - me.y;
       me.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : dy > 0 ? 's' : 'n';
+      if (t.kind === 'place') { leaveBy({ to: t.ref.to, at: t.ref.arrive, label: t.ref.name || t.ref.id }); return; }
       if (t.kind === 'person') {
         t.ref._face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'w' : 'e') : dy > 0 ? 'n' : 's';
         say(t.ref.name || 'Someone', t.ref.says || t.ref.note || (t.ref.name ? t.ref.name + ' is here.' : 'Someone is here.'));
@@ -432,11 +457,14 @@
         fade.classList.add('on');
         await new Promise((r) => setTimeout(r, 320));
         const from = mapId;
-        try { await load(e.to, isPt(e.at) ? e.at : null, null); } catch { await load(from, null, null); }
+        // a way out to the world map names a place there: she comes out at it
+        let at = e.at;
+        if (typeof at === 'string') { const p = (maps[e.to].places || []).find((q) => q.id === at); at = p && isPt(p.at) ? p.at : null; }
+        try { await load(e.to, isPt(at) ? at : null, null); } catch { await load(from, null, null); }
         busy = false;
         fade.classList.remove('on');
         if (opts.onMap) opts.onMap(mapId);
-      } else note('The way out to ' + (e.label || e.to || 'somewhere') + (e.to ? '. It leads to “' + e.to + '”, which isn’t one of these maps.' : '. It doesn’t lead anywhere yet.'));
+      } else if (!busy) note('The way out to ' + (e.label || e.to || 'somewhere') + (e.to ? '. It leads to “' + e.to + '”, which isn’t one of these maps.' : '. It doesn’t lead anywhere yet.'));
     }
 
     // a step of the walk
@@ -471,7 +499,7 @@
       }
       const want = Math.hypot(dx, dy), h = rules.sizes.h;
       const runBoost = 1 + 0.5 * clamp((me.run - 0.8) / 0.8, 0, 1);
-      const speed = 1.7 * h * runBoost;
+      const speed = (map.pace > 0 ? map.pace : 1.7) * h * runBoost;
       let tvx = 0, tvy = 0;
       if (want > 0) { const v = last ? Math.min(speed, want * 9) : speed; tvx = (dx / want) * v; tvy = (dy / want) * v; }
       const ease = 1 - Math.exp(-dt / ((want > 0 ? 0.12 : 0.1) / 3));
@@ -493,8 +521,14 @@
       }
       const moved = Math.hypot(me.x - ox, me.y - oy);
       me.moving = moved > 0.02;
-      if (want > 0) me.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : dy > 0 ? 's' : 'n';
-      if (me.moving) { me.walkT += dt * runBoost; me.run += dt; me.blocked = 0; }
+      if (want > 0) {
+        const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : dy > 0 ? 's' : 'n';
+        if (d !== me.dir) me.turn = dx === 0 ? (d === 'n' ? -1 : 1) : Math.sign(dx);
+        me.dir = d;
+      }
+      me.turn *= Math.exp(-dt / 0.11);
+      me.lean = speed > 0 ? clamp(me.vx / speed, -1, 1) : 0;
+      if (me.moving) { me.walkT += dt * runBoost; me.walk += moved / h; me.run += dt; me.blocked = 0; }
       else { me.walkT = 0; me.run = 0; if (want > 0) { me.blocked += dt; if (route && me.blocked > 0.25) { route = null; aim = null; } } }
       // ways out, then story areas
       let inside = null;
@@ -521,7 +555,7 @@
 
     function draw(now) {
       const r = dpr(), W = cv.width / r, H = cv.height / r, [MW, MH] = sizeOf(map), z0 = rules.sizes.h;
-      cam.z = (0.15 * Math.min(W, H) / z0) * zoomBy;
+      cam.z = (0.15 * Math.min(W, H) / z0) * zoomBy * ((map.zoom > 0 ? map.zoom : 0.7) / 0.7);
       cam.z = Math.max(cam.z, W / MW, H / MH);
       const vw = W / cam.z, vh = H / cam.z;
       cam.x = vw >= MW ? (MW - vw) / 2 : clamp(me.x - vw / 2, 0, MW - vw);
@@ -551,16 +585,24 @@
         g.fillStyle = gr;
         g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill();
       }
+      // the world map's places (under everyone: she walks in front of their banners)
+      if (map.kind === 'world') drawPlaces(sx, sy);
       // people, her and the fronts, back to front
       const scale = (cam.z * z0) / 42;
       const list = [];
       for (const p of map.people || []) if (isPt(p.at) && !p.hidden) list.push({ y: p.at[1], x: p.at[0], sheet: sheetFor(p.look || 'hooded'), dir: p._face || p.face0 || 's', step: 0 });
-      list.push({ y: me.y, x: me.x, sheet: sheetFor(opts.walker || 'io'), dir: me.dir, step: me.moving ? [1, 0, 2, 0][Math.floor(me.walkT / 0.1) % 4] : 0 });
+      const doll = painted();
+      if (doll && doll.loaded) list.push({ y: me.y, x: me.x, doll });
+      else list.push({ y: me.y, x: me.x, sheet: sheetFor(opts.walker === 'io-painted' ? 'io' : opts.walker || 'io'), dir: me.dir, step: me.moving ? [1, 0, 2, 0][Math.floor(me.walkT / 0.1) % 4] : 0 });
       for (const f of map.front || []) if (f && Array.isArray(f.pts) && f.pts.length >= 3) list.push({ y: Number.isFinite(f.base) ? f.base : bboxOf(f.pts)[3], front: f });
       list.sort((a, b) => a.y - b.y);
       for (const it of list) {
         if (it.front) { drawFront(it.front, k, kh, vw, vh); continue; }
         const x = sx(it.x), y = sy(it.y);
+        if (it.doll) {
+          it.doll.draw(g, x, y, (cam.z * z0) / it.doll.h, { dir: me.dir, walk: me.walk, moving: me.moving, t: now / 1000, lean: me.lean, turn: me.turn });
+          continue;
+        }
         g.fillStyle = 'rgba(0,0,0,0.38)';
         g.beginPath(); g.ellipse(x, y - scale, 9 * scale, 2.6 * scale, 0, 0, Math.PI * 2); g.fill();
         if (!it.sheet) continue;
@@ -590,6 +632,27 @@
       g.drawImage(pic, b[0] * k, b[1] * kh, (b[2] - b[0]) * k, (b[3] - b[1]) * kh, (b[0] - cam.x) * cam.z, (b[1] - cam.y) * cam.z, (b[2] - b[0]) * cam.z, (b[3] - b[1]) * cam.z);
       g.restore();
     }
+    // each place on the world map: a gold mark and its name on a banner under it (gold when she is
+    // close), where she doesn't hide it when she stands on the mark
+    function drawPlaces(sx, sy) {
+      const near = nearest();
+      g.font = 'italic 15px "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
+      for (const p of map.places || []) {
+        if (!isPt(p.at)) continue;
+        const x = sx(p.at[0]), y = sy(p.at[1]), hot = near && near.ref === p, name = p.name || p.id || '';
+        g.fillStyle = '#1a0c1d'; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
+        g.fillStyle = hot ? '#ffd66e' : '#e2bd67'; g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill();
+        const w = g.measureText(name).width + 20, bx = x - w / 2, by = y + 12;
+        g.fillStyle = hot ? 'rgba(120,70,20,0.92)' : 'rgba(24,12,30,0.84)';
+        g.strokeStyle = hot ? '#ffd66e' : 'rgba(236,220,184,0.75)';
+        g.lineWidth = 1;
+        g.beginPath();
+        if (g.roundRect) g.roundRect(bx, by, w, 24, 12); else g.rect(bx, by, w, 24);
+        g.fill(); g.stroke();
+        g.fillStyle = '#ffe6b0';
+        g.fillText(name, bx + 10, by + 17);
+      }
+    }
     function drawPaths(sx, sy) {
       const shape = (pts) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y)))); g.closePath(); };
       g.lineWidth = 1.5;
@@ -618,6 +681,7 @@
       for (const e of map.exits || []) if (Array.isArray(e.rect)) mg.fillRect(e.rect[0] * k - r, e.rect[1] * k - r, Math.max(3 * r, (e.rect[2] - e.rect[0]) * k), Math.max(3 * r, (e.rect[3] - e.rect[1]) * k));
       mg.fillStyle = '#ffd36e';
       for (const p of map.people || []) if (isPt(p.at)) { mg.beginPath(); mg.arc(p.at[0] * k, p.at[1] * k, 2 * r, 0, Math.PI * 2); mg.fill(); }
+      if (map.kind === 'world') for (const p of map.places || []) if (isPt(p.at)) { mg.fillStyle = '#e2bd67'; mg.fillRect(p.at[0] * k - 2.5 * r, p.at[1] * k - 2.5 * r, 5 * r, 5 * r); }
       const pu = 0.5 + 0.5 * Math.sin(now / 180);
       mg.fillStyle = '#1a0c1d';
       mg.beginPath(); mg.arc(me.x * k, me.y * k, (3.4 + pu) * r, 0, Math.PI * 2); mg.fill();
@@ -637,8 +701,12 @@
       get mapId() { return mapId; },
       get map() { return map; },
       get busy() { return busy; },
+      get cam() { return { z: cam.z, x: cam.x, y: cam.y }; },
+      // who is drawn walking: 'io-painted' once her pictures are in, else the pixel look
+      get drawn() { const d = painted(); return d && d.loaded ? 'io-painted' : opts.walker === 'io-painted' ? 'io' : opts.walker || 'io'; },
       setShowPaths(on) { showPaths = !!on; },
       setWalker(look) { opts.walker = look; },
+      tune(id, o) { const m = maps[id]; if (!m) return; if (o.zoom !== undefined) m.zoom = o.zoom; if (o.pace !== undefined) m.pace = o.pace; },
       walkTo(x, y) { route = findPath(G, [me.x, me.y], [x, y]); },
       say,
       note,
@@ -659,7 +727,7 @@
     let list = null;
     const field = create(host, {
       maps,
-      walker: data.walker || 'io',
+      walker: data.walker || 'io-painted',
       showPaths: !!data.showPaths,
       menuLabel: '☰ Maps',
       onMenu: () => toggleList(),
@@ -681,10 +749,17 @@
     return field;
   }
 
+  // the painted Io is made once, and her pictures load while the rest gets ready
+  let doll = null;
+  const paintedIo = () => {
+    if (!doll && typeof root.makePaintedIo === 'function') { try { doll = root.makePaintedIo((u) => u); } catch { doll = null; } }
+    return doll;
+  };
+
   root.WalkingPathsEngine = {
     create,
     play,
     rules: { sizes, standTest, grid, reach, findPath, inPoly, bboxOf },
-    looks: () => ['io'].concat(Object.keys(root.FOLK_LOOKS || {})),
+    looks: () => (typeof root.makePaintedIo === 'function' ? ['io-painted'] : []).concat(['io'], Object.keys(root.FOLK_LOOKS || {})),
   };
 })(typeof window !== 'undefined' ? window : globalThis);

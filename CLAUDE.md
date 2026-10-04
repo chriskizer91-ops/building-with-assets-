@@ -7,8 +7,9 @@ Chris's games built in, made to keep working offline for decades. The same conso
 web browser (`Mooncart.html` for laptops, and a demo page), where people add their own games.
 `README.md` is for Chris; `docs/how-it-works.md` is for whoever works on it next.
 
-This repository also has Walking Paths (`walking-paths/`): a separate one-file tool, Envoi's walking-path page made
-to work with any picture. The same rules apply to it: no internet, plain words, something Chris can open on his phone.
+This repository also has `editing-tools/`: tools for making the games, each built into one file. The first is
+Walking Paths (`editing-tools/walking-paths/`), Envoi's walking-path page made to work with any picture. The same
+rules apply to them: no internet, plain words, something Chris can open on his phone.
 
 ## Rules
 

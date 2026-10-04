@@ -1,4 +1,4 @@
-# Builds Walking Paths (walking-paths/) into one file, Walking-Paths.html, and checks it in Chromium
+# Builds Walking Paths (editing-tools/walking-paths/) into one file, Walking-Paths.html, and checks it in Chromium
 # (tools/walking-paths-smoke.mjs). On the main branch, or when run by hand with "publish", it puts the
 # file on the Releases page under the tag walking-paths, so its download link never changes:
 # https://github.com/chriskizer91-ops/building-with-assets-/releases/download/walking-paths/Walking-Paths.html
@@ -7,7 +7,7 @@ name: Build Walking Paths
 
 on:
   push:
-    paths: ['walking-paths/**', 'tools/build-walking-paths.mjs', 'tools/walking-paths-smoke.mjs', 'package.json', 'package-lock.json', '.github/workflows/walking-paths.yml']
+    paths: ['editing-tools/**', 'tools/build-walking-paths.mjs', 'tools/walking-paths-smoke.mjs', 'package.json', 'package-lock.json', '.github/workflows/walking-paths.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -59,7 +59,9 @@ jobs:
 
           Download **Walking-Paths.html** below and open it in a web browser, on a laptop or a phone. It needs no internet.
 
-          Add a picture of a map, mark where people can walk on it (by hand, or with the magic wand), walk someone round it to try it, and save the maps file: every map with its picture inside, ready for a game. It can also save a walk-around page you can add to Mooncart.
+          Add a picture of a map, mark where people can walk on it (by hand, or with the magic wand), walk Io round it to try it, and save the maps file: every map with its picture inside, ready for a game. It can also save a walk-around page you can add to Mooncart.
+
+          Add a world map and a few places at once and it joins them up: a gold flag on the world map for each place, and a way back. Picture size makes big pictures smaller without moving anything drawn on them, and each map can set how close the camera is and how fast she walks.
 
           The pictures below show this exact build in Chromium, on a laptop and on a phone.
           NOTES
@@ -70,5 +72,8 @@ jobs:
             "build/walking-paths/Walking-Paths.html" \
             "$S/01-laptop-examples.png#On a laptop" \
             "$S/03-laptop-wand.png#The magic wand" \
+            "$S/31-world-map.png#A world map joined to three places" \
+            "$S/32-world-walk.png#Walking the world map" \
+            "$S/34-picture-size.png#Picture size" \
             "$S/10-phone-start.png#On a phone" \
             "$S/12-phone-walking.png#Walking on a phone"

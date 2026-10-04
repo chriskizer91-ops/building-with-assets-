@@ -11,14 +11,16 @@ export const S = {
   maps: {},              // id -> map
   order: [],             // map ids, in the list's order
   cur: null,             // the map on screen
-  tool: 'select',        // select | walk | block | front | exit | person | thing | story
+  tool: 'select',        // select | walk | block | front | exit | person | thing | story | place
   drawBy: 'hand',        // hand | wand
   spread: 40,            // how far the magic wand spreads
   sel: null,             // what is picked: { kind, i, sub? }
   hover: null,
   draft: null,           // the shape being drawn: [[x, y], ...]
   layers: { walk: true, block: true, front: true, exits: true, people: true, reach: false },
-  walker: 'io',
+  walker: 'io-painted',  // who walks: the painted Io (a paper doll), or a pixel sprite
+  walkerChosen: false,   // picked in the list (otherwise the painted Io, the newest default)
+  placeFor: null,        // the map the next tap on the world map puts there (the + Place tool)
   showPaths: false,
   walking: false,
   rev: 0,                // goes up with every change to the maps
