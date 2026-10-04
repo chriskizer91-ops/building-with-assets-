@@ -430,6 +430,7 @@ export function renderMapSettings() {
     m.name = before;
     if (v === before) { name.value = v; S.rev++; return; }
     const nid = keyAfterRename(id, v), leading = mapsLeadingTo(id);
+    if (nid !== id && S.walking) emit('stop-walk'); // (the walk knows the map by its old key)
     remember([...new Set([id, nid, ...leading])]);
     if (renameMap(id, v) !== id) S.cur = nid;
     changed('');
@@ -444,6 +445,7 @@ export function renderMapSettings() {
     ? 'Its gold flags are places that lead into the other maps, and their ways out to the world map bring her back. With no walk areas drawn she can go anywhere on it.'
     : 'Tick it for the map of the whole land: its places lead into the other maps.');
   wc.addEventListener('change', () => {
+    if (S.walking) emit('stop-walk'); // (its key may change)
     if (wc.checked) {
       const nid = makeWorld(id);
       S.cur = nid;
@@ -483,7 +485,7 @@ export function renderMapSettings() {
   apply.addEventListener('click', () => {
     if (!sizeOk()) return;
     const nw = Math.round(Number(wi.value)), nh = Math.round(Number(hi.value));
-    remember([id, ...S.order.filter((k) => S.maps[k].exits.some((e) => e.to === id))]);
+    remember([id, ...mapsLeadingTo(id)]);
     resizeMap(id, nw, nh);
     changed('Map size now ' + nw + ' × ' + nh + ': everything on it stretched to match.');
     emit('maps');
@@ -614,8 +616,15 @@ export function renderReach() {
 // ---------------------------------------------------------------------------------------------
 // a question asked in the page (the artifact viewer shows no confirm boxes)
 
-// (`more`: anything else to show under the text, like a list to pick from)
+// (`more`: anything else to show under the text, like a list to pick from). One question at a
+// time: a question asked while another is open waits for it to be answered.
+let asking = Promise.resolve();
 export function ask(title, text, buttons, more) {
+  const turn = asking.then(() => askNow(title, text, buttons, more));
+  asking = turn.catch(() => {});
+  return turn;
+}
+function askNow(title, text, buttons, more) {
   return new Promise((resolve) => {
     const d = $('wp-dialog'), row = $('wp-dialog-buttons'), extra = $('wp-dialog-more');
     $('wp-dialog-title').textContent = title;

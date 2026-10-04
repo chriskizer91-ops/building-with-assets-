@@ -46,6 +46,8 @@
   }
   const inRect = (r, x, y, pad) => x >= r[0] - pad && x <= r[2] + pad && y >= r[1] - pad && y <= r[3] + pad;
   const sizeOf = (map) => (Array.isArray(map.size) ? map.size : [1536, 1024]);
+  // a world map's places that are somewhere on it (none on any other map)
+  const placesOf = (map) => (map && map.kind === 'world' && Array.isArray(map.places) ? map.places.filter((p) => p && isPt(p.at)) : []);
 
   // ---------------------------------------------------------------------------------------------
   // The rules. Envoi made them for Io 52 pixels tall on a 1536 x 1024 painting; here every length
@@ -140,12 +142,12 @@
       if (Array.isArray(s.rect)) { if (!nearRect(s.rect)) add('spot', i, mid(s.rect), 'She can’t reach the story area ' + (s.label || s.id || '') + '.'); }
       else if (isPt(s.at) && !nearPoint(s.at[0], s.at[1], z.near)) add('spot', i, s.at, 'She can’t get near enough to ' + (s.label || s.kind || 'a thing') + '.');
     });
-    if (map.kind === 'world') (map.places || []).forEach((p, i) => {
-      if (isPt(p.at) && !nearPoint(p.at[0], p.at[1], z.near)) add('place', i, p.at, 'She can’t get near enough to ' + (p.name || p.id || 'a place') + ' on the world map.');
+    if (map.kind === 'world' && Array.isArray(map.places)) map.places.forEach((p, i) => {
+      if (p && isPt(p.at) && !nearPoint(p.at[0], p.at[1], z.near)) add('place', i, p.at, 'She can’t get near enough to ' + (p.name || p.id || 'a place') + ' on the world map.');
     });
     // where she comes in from the world map's places
-    for (const from of Object.keys(maps)) if (maps[from].kind === 'world') (maps[from].places || []).forEach((p, pi) => {
-      if (p.to !== id || !isPt(p.arrive)) return;
+    for (const from of Object.keys(maps)) if (maps[from].kind === 'world' && Array.isArray(maps[from].places)) maps[from].places.forEach((p, pi) => {
+      if (!p || p.to !== id || !isPt(p.arrive)) return;
       const [k, d] = nearestOpen(p.arrive[0], p.arrive[1]), who = 'Coming from the world map, she';
       for (const x of map.exits || []) if (Array.isArray(x.rect) && inRect(x.rect, p.arrive[0], p.arrive[1], z.exitPad)) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive inside the way out to ' + (x.label || placeName(x.to)) + ', and leave again at once.');
       if (k < 0) add('arrival', from + ':p' + pi, p.arrive, who + ' would arrive where there is no walk area at all.');
@@ -380,7 +382,7 @@
       const out = [];
       for (const p of map.people || []) if (isPt(p.at) && !p.hidden) out.push({ kind: 'person', ref: p, x: p.at[0], y: p.at[1], label: 'Talk to ' + (p.name || 'them') });
       for (const s of map.spots || []) if (!Array.isArray(s.rect) && isPt(s.at)) out.push({ kind: 'thing', ref: s, x: s.at[0], y: s.at[1], label: s.label ? (s.kind === 'rest' ? 'Rest: ' : 'Look: ') + s.label : s.kind || 'Look' });
-      if (map.kind === 'world') for (const p of map.places || []) if (isPt(p.at)) out.push({ kind: 'place', ref: p, x: p.at[0], y: p.at[1], label: 'Go to ' + (p.name || p.id || 'this place') });
+      for (const p of placesOf(map)) out.push({ kind: 'place', ref: p, x: p.at[0], y: p.at[1], label: 'Go to ' + (p.name || p.id || 'this place') });
       return out;
     }
     function nearest() {
@@ -395,7 +397,7 @@
       keys.clear(); padDirs.clear(); route = null; aim = null;
       const dx = t.x - me.x, dy = t.y - me.y;
       me.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : dy > 0 ? 's' : 'n';
-      if (t.kind === 'place') { leaveBy({ to: t.ref.to, at: t.ref.arrive, label: t.ref.name || t.ref.id }); return; }
+      if (t.kind === 'place') { leaveBy({ to: t.ref.to, at: t.ref.arrive, label: t.ref.name || t.ref.id, place: true }); return; }
       if (t.kind === 'person') {
         t.ref._face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'w' : 'e') : dy > 0 ? 'n' : 's';
         say(t.ref.name || 'Someone', t.ref.says || t.ref.note || (t.ref.name ? t.ref.name + ' is here.' : 'Someone is here.'));
@@ -457,14 +459,22 @@
         fade.classList.add('on');
         await new Promise((r) => setTimeout(r, 320));
         const from = mapId;
-        // a way out to the world map names a place there: she comes out at it
-        let at = e.at;
-        if (typeof at === 'string') { const p = (maps[e.to].places || []).find((q) => q.id === at); at = p && isPt(p.at) ? p.at : null; }
-        try { await load(e.to, isPt(at) ? at : null, null); } catch { await load(from, null, null); }
+        try {
+          // a way out to the world map names a place there: she comes out at it
+          let at = e.at;
+          if (typeof at === 'string') {
+            const to = maps[e.to], p = to.kind === 'world' && Array.isArray(to.places) ? to.places.find((q) => q && q.id === at) : null;
+            at = p && isPt(p.at) ? p.at : null;
+          }
+          await load(e.to, isPt(at) ? at : null, null);
+        } catch { await load(from, null, null).catch(() => {}); }
         busy = false;
         fade.classList.remove('on');
         if (opts.onMap) opts.onMap(mapId);
-      } else if (!busy) note('The way out to ' + (e.label || e.to || 'somewhere') + (e.to ? '. It leads to “' + e.to + '”, which isn’t one of these maps.' : '. It doesn’t lead anywhere yet.'));
+      } else if (!busy) {
+        const what = e.place ? (e.label || 'This place') : 'The way out to ' + (e.label || e.to || 'somewhere');
+        note(what + (e.to ? (e.place ? ' leads to “' : '. It leads to “') + e.to + '”, which isn’t one of these maps.' : (e.place ? ' doesn’t lead anywhere yet.' : '. It doesn’t lead anywhere yet.')));
+      }
     }
 
     // a step of the walk
@@ -637,8 +647,7 @@
     function drawPlaces(sx, sy) {
       const near = nearest();
       g.font = 'italic 15px "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
-      for (const p of map.places || []) {
-        if (!isPt(p.at)) continue;
+      for (const p of placesOf(map)) {
         const x = sx(p.at[0]), y = sy(p.at[1]), hot = near && near.ref === p, name = p.name || p.id || '';
         g.fillStyle = '#1a0c1d'; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
         g.fillStyle = hot ? '#ffd66e' : '#e2bd67'; g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill();
@@ -681,7 +690,7 @@
       for (const e of map.exits || []) if (Array.isArray(e.rect)) mg.fillRect(e.rect[0] * k - r, e.rect[1] * k - r, Math.max(3 * r, (e.rect[2] - e.rect[0]) * k), Math.max(3 * r, (e.rect[3] - e.rect[1]) * k));
       mg.fillStyle = '#ffd36e';
       for (const p of map.people || []) if (isPt(p.at)) { mg.beginPath(); mg.arc(p.at[0] * k, p.at[1] * k, 2 * r, 0, Math.PI * 2); mg.fill(); }
-      if (map.kind === 'world') for (const p of map.places || []) if (isPt(p.at)) { mg.fillStyle = '#e2bd67'; mg.fillRect(p.at[0] * k - 2.5 * r, p.at[1] * k - 2.5 * r, 5 * r, 5 * r); }
+      for (const p of placesOf(map)) { mg.fillStyle = '#e2bd67'; mg.fillRect(p.at[0] * k - 2.5 * r, p.at[1] * k - 2.5 * r, 5 * r, 5 * r); }
       const pu = 0.5 + 0.5 * Math.sin(now / 180);
       mg.fillStyle = '#1a0c1d';
       mg.beginPath(); mg.arc(me.x * k, me.y * k, (3.4 + pu) * r, 0, Math.PI * 2); mg.fill();

@@ -388,6 +388,8 @@ await ready(page);
   await page.screenshot({ path: path.join(OUT, '30-world-question.png') });
   await page.click('#wp-dialog-buttons button');
   await page.waitForFunction(() => WalkingPaths.S.cur === 'world', null, { timeout: 30000 }).catch(() => {});
+  // (the world map is joined up at once; the big picture is made smaller after that)
+  await page.waitForFunction(() => !/smaller…/.test(document.getElementById('wp-status').textContent), null, { timeout: 30000 }).catch(() => {});
   const w = await state(page, () => {
     const S = WalkingPaths.S, world = S.maps.world;
     if (!world) return null;
@@ -478,6 +480,87 @@ await ready(page);
   await w2.page.waitForTimeout(1500);
   check(!w2.errors.length && (await w2.page.textContent('.wpe-plate')) === 'Town', 'and it walks' + (w2.errors.length ? ': ' + w2.errors.join(' | ') : ''));
   await w2.page.close();
+
+  // changing the town's size moves where she arrives from the world map, and Undo puts it back
+  const arrive = () => state(page, () => WalkingPaths.S.maps.world.places.find((p) => p.to === 'town').arrive.slice());
+  const a0 = await arrive();
+  await page.fill('#wp-map-w', '1800');
+  await page.click('#wp-mapset button:has-text("Use this size")');
+  const a1 = await arrive();
+  await page.keyboard.press('Control+z');
+  const a2 = await arrive();
+  check(a1[0] === a0[0] * 2 && a2[0] === a0[0] && a2[1] === a0[1] && (await state(page, () => WalkingPaths.S.maps.town.size[0])) === 900, 'a new size for the town moves where she arrives from the world map, and Undo moves it back (' + a0 + ' → ' + a1 + ' → ' + a2 + ')');
+
+  // on the world map: deleting a flag shows the town as not on it any more; Undo brings it back
+  await page.click('.wp-maps li:has-text("World map") .wp-map-pick');
+  const townAt = await state(page, () => WalkingPaths.S.maps.world.places.find((p) => p.to === 'town').at);
+  await clickMap(page, townAt[0], townAt[1]);
+  check(await state(page, () => WalkingPaths.S.sel && WalkingPaths.S.sel.kind === 'place'), 'tapping a gold flag picks it');
+  await page.uncheck('#wp-l-exits');
+  check(await state(page, () => !WalkingPaths.S.sel), 'hiding “Ways out, places…” lets go of the picked flag');
+  await page.check('#wp-l-exits');
+  await clickMap(page, townAt[0], townAt[1]);
+  await page.keyboard.press('Delete');
+  check(await page.isVisible('#wp-mapset button[data-put="town"]'), 'deleting the town’s flag lists the town as not on the world map, with Put it on');
+  await page.keyboard.press('Control+z');
+  check(await page.isHidden('#wp-mapset button[data-put="town"]') && (await state(page, () => WalkingPaths.S.maps.world.places.length)) === 3, 'and Undo puts the flag back');
+
+  // a second flag leading into the town gets a way back of its own
+  await page.click('[data-tool="place"]');
+  await clickMap(page, 900, 900);
+  await page.selectOption('#wp-place-to', 'town');
+  const doors = await state(page, () => {
+    const t = WalkingPaths.S.maps.town, w = WalkingPaths.S.maps.world;
+    const backs = t.exits.filter((e) => e.to === 'world');
+    const apart = backs.length === 2 && !(backs[0].rect[0] < backs[1].rect[2] && backs[1].rect[0] < backs[0].rect[2] && backs[0].rect[1] < backs[1].rect[3] && backs[1].rect[1] < backs[0].rect[3]);
+    const own = w.places.filter((p) => p.to === 'town').every((p) => backs.some((e) => e.at === p.id));
+    return { apart, own, n: backs.length };
+  });
+  check(doors.apart && doors.own, 'a second flag into the town gets its own way back, apart from the first (' + doors.n + ' ways back)');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  check(await state(page, () => WalkingPaths.S.maps.world.places.length === 3 && WalkingPaths.S.maps.town.exits.length === 1), 'and two undos take the flag and its way back away');
+
+  // a picture added later is put on the world map away from the flags there
+  await page.setInputFiles('#wp-file-pictures', png('cave.png', pics.town));
+  await page.waitForSelector('#wp-dialog:not([hidden])', { timeout: 20000 });
+  check(await page.isChecked('#wp-add-join'), 'adding one more picture offers to put it on the world map');
+  await page.click('#wp-dialog-buttons button');
+  await page.waitForFunction(() => WalkingPaths.S.maps.world.places.some((p) => p.to === 'cave'), null, { timeout: 10000 }).catch(() => {});
+  const gap = await state(page, () => {
+    const pl = WalkingPaths.S.maps.world.places, cave = pl.find((p) => p.to === 'cave');
+    return cave ? Math.min(...pl.filter((p) => p !== cave).map((p) => Math.hypot(p.at[0] - cave.at[0], p.at[1] - cave.at[1]))) : 0;
+  });
+  check(gap > 400, 'its flag goes on a free spot, away from the others (' + Math.round(gap) + ' px from the nearest)');
+
+  // Undo pressed while a big picture is still being made smaller: nothing breaks
+  await page.setInputFiles('#wp-file-pictures', png('meadow.png', pics.world));
+  await page.waitForSelector('#wp-dialog:not([hidden])', { timeout: 20000 });
+  await page.evaluate(() => {
+    document.querySelector('#wp-dialog-buttons button').click();
+    const t = setInterval(() => {
+      if (/smaller…/.test(document.getElementById('wp-status').textContent)) { clearInterval(t); document.getElementById('wp-undo').click(); document.getElementById('wp-undo').click(); }
+    }, 5);
+  });
+  await page.waitForFunction(() => !/smaller…/.test(document.getElementById('wp-status').textContent), null, { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  check(!errors.length && !/smaller…/.test(await page.textContent('#wp-status')) && (await state(page, () => !WalkingPaths.S.maps.meadow)), 'Undo while a big picture is being made smaller takes the picture away, and nothing breaks');
+
+  // Picture size for every map, cancelled while it works: nothing changes
+  await page.click('.wp-maps li:has-text("Forest") .wp-map-pick');
+  const before = await state(page, () => WalkingPaths.S.order.map((k) => WalkingPaths.S.maps[k].pic && WalkingPaths.S.maps[k].pic.key).join());
+  await page.click('#wp-picture-size');
+  await page.waitForFunction(() => document.querySelectorAll('#wp-shrink-options button.wp-size').length === 6, null, { timeout: 30000 }).catch(() => {});
+  await page.click('#wp-shrink-options button[data-size="50"]');
+  await page.check('#wp-shrink-all');
+  await page.evaluate(() => {
+    document.getElementById('wp-shrink-use').click();
+    setTimeout(() => { document.getElementById('wp-shrink-cancel').click(); setTimeout(() => document.getElementById('wp-picture-size').click(), 10); }, 10);
+  });
+  await page.waitForTimeout(4000);
+  const after = await state(page, () => WalkingPaths.S.order.map((k) => WalkingPaths.S.maps[k].pic && WalkingPaths.S.maps[k].pic.key).join());
+  check(after === before && (await page.isVisible('#wp-shrink')), 'Cancel while it works changes nothing, and Picture size opened again stays open');
+  await page.click('#wp-shrink-close');
   check(!errors.length, 'no errors with the world map' + (errors.length ? ': ' + errors.join(' | ') : ''));
 }
 await ctx.close();

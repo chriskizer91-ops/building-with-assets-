@@ -6,6 +6,7 @@
 import { S, remember, changed, emit } from './state.js';
 import { whenReady, pictureBlob, addPicture } from './pictures.js';
 import { mapName } from './project.js';
+import { note } from './editor.js';
 import { $, el, plural, sizeText, extFor } from './util.js';
 
 export const SIZES = [100, 83, 75, 67, 50];
@@ -213,70 +214,82 @@ export function closeShrink() {
   UI.versions = [];
 }
 
-// swap a map's picture for a smaller one (its map size stays; the caller keeps the undo step),
-// ready to draw when this returns
-async function swapPicture(id, blob, type, w, h) {
-  const m = S.maps[id], key = await addPicture(blob);
-  m.pic = { key, type, file: id + '.' + extFor(type), w, h };
-  delete m.wantPicture;
+// A smaller picture goes in two steps: stored and loaded first (nothing on the maps changes while
+// that takes its time), then put on the maps all at once with one undo step, and only on maps that
+// still have the picture it was made from (an undo or a deleted map may have come meanwhile).
+async function storePicture(blob) {
+  const key = await addPicture(blob);
   await whenReady(key);
+  return key;
+}
+const stillHas = (x) => !!(S.maps[x.id] && S.maps[x.id].pic && S.maps[x.id].pic.key === x.from);
+function putPictures(list) {
+  remember(list.map((x) => x.id));
+  for (const x of list) {
+    const m = S.maps[x.id];
+    m.pic = { key: x.key, type: x.type, file: x.id + '.' + extFor(x.type), w: x.w, h: x.h };
+    delete m.wantPicture;
+  }
 }
 
 async function useIt() {
   const pick = UI.versions.find((v) => v.key === UI.pick);
   if (!pick || pick.key === 'orig') return;
-  const all = $('wp-shrink-all').checked, id = UI.id, mapNow = S.maps[id];
+  const run = UI.run, id = UI.id, all = $('wp-shrink-all').checked;
   const ids = all ? S.order.filter((k) => S.maps[k].pic) : [id];
   $('wp-shrink-use').disabled = true;
-  // the other maps' pictures are made first (nothing changes until they are all ready)
-  const made = [[id, { blob: pick.blob, type: pick.type, w: pick.w, h: pick.h }]];
+  const made = [];
   try {
     for (const k of ids) {
-      if (k === id) continue;
-      const m = S.maps[k], before = pictureBlob(m.pic.key);
-      $('wp-shrink-status').textContent = 'Making ' + mapName(k) + '’s picture ' + pick.pct + '%…';
-      const img = await whenReady(m.pic.key);
-      if (!img || !UI.versions.length) continue;
-      const v = await makeVersion(img, pick.pct);
-      if (before && v.blob.size >= before.size) continue; // no smaller: left as it was
-      made.push([k, v]);
+      const m = S.maps[k];
+      if (run !== UI.run) return; // closed meanwhile: nothing changes
+      if (!m || !m.pic) continue;
+      const from = m.pic.key, before = pictureBlob(from);
+      let v = k === id ? pick : null;
+      if (!v) {
+        $('wp-shrink-status').textContent = 'Making ' + mapName(k) + '’s picture ' + pick.pct + '%…';
+        const img = await whenReady(from);
+        if (!img || run !== UI.run) continue;
+        v = await makeVersion(img, pick.pct);
+        if (before && v.blob.size >= before.size) continue; // no smaller: left as it was
+      }
+      if (run !== UI.run) return;
+      made.push({ id: k, from, key: await storePicture(v.blob), type: v.type, w: v.w, h: v.h, saved: (before ? before.size : 0) - v.blob.size });
     }
   } catch (e) {
+    if (run !== UI.run) return;
     $('wp-shrink-status').textContent = 'Couldn’t make the smaller pictures: ' + (e && e.message ? e.message : e);
     $('wp-shrink-use').disabled = false;
     return;
   }
-  if (!UI.versions.length || S.maps[id] !== mapNow) return; // closed, or the map went, meanwhile
-  remember(made.map(([k]) => k));
-  let saved = 0;
-  for (const [k, v] of made) {
-    const before = pictureBlob(S.maps[k].pic.key);
-    await swapPicture(k, v.blob, v.type, v.w, v.h);
-    saved += (before ? before.size : 0) - v.blob.size;
-  }
+  if (run !== UI.run) return;
+  const ok = made.filter(stillHas);
   closeShrink();
-  changed((made.length === 1 ? 'The picture is ' : plural(made.length, 'picture is', 'pictures are') + ' ') + pick.name + ' now, ' + sizeText(Math.max(0, saved)) + ' smaller. Undo puts it back.');
+  if (!ok.length) { note('Nothing changed: the picture isn’t there any more.'); return; }
+  putPictures(ok);
+  const saved = ok.reduce((a, x) => a + x.saved, 0);
+  changed((ok.length === 1 ? 'The picture is ' : plural(ok.length, 'picture is', 'pictures are') + ' ') + pick.name + ' now, ' +
+    sizeText(Math.abs(saved)) + (saved >= 0 ? ' smaller' : ' bigger') + '. Undo puts ' + (ok.length === 1 ? 'it' : 'them') + ' back.');
   emit('maps');
 }
 
-// When pictures are added: the big ones made smaller (no more than BIG_SIDE pixels across) when
-// that saves something. One undo step for them all. Returns how many were changed.
+// When pictures are added: the big ones made smaller (no more than BIG_SIDE pixels on the longest
+// side) when that saves a fifth or more. One undo step for them all. Returns the maps changed.
 export async function shrinkBig(ids) {
   const made = [];
   for (const k of ids) {
     const m = S.maps[k];
     if (!m || !m.pic) continue;
-    const img = await whenReady(m.pic.key), before = pictureBlob(m.pic.key);
+    const from = m.pic.key, img = await whenReady(from), before = pictureBlob(from);
     if (!img || !before) continue;
     const pct = Math.min(100, Math.floor((BIG_SIDE / Math.max(img.naturalWidth, img.naturalHeight)) * 100));
     const v = await makeVersion(img, pct);
     if (v.blob.size > before.size * 0.8) continue;
-    made.push([k, v]);
+    made.push({ id: k, from, key: await storePicture(v.blob), type: v.type, w: v.w, h: v.h });
   }
-  if (!made.length) return 0;
-  remember(made.map(([k]) => k));
-  for (const [k, v] of made) await swapPicture(k, v.blob, v.type, v.w, v.h);
-  return made.length;
+  const ok = made.filter(stillHas);
+  if (ok.length) putPictures(ok);
+  return ok.map((x) => x.id);
 }
 
 // the dialog's buttons

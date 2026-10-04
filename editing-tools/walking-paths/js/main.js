@@ -33,7 +33,10 @@ on('changed', (say) => {
   panel.renderBar();
   panel.renderPicked();
   // the list is rebuilt when maps come or go or change their names or sizes, the settings only then
-  const sig = S.cur + '|' + S.order.map((id) => id + ':' + S.maps[id].name + ':' + S.maps[id].size + ':' + S.maps[id].walk.length + ':' + S.maps[id].exits.length + ':' + !!S.maps[id].pic).join(',');
+  const sig = S.cur + '|' + S.order.map((id) => {
+    const m = S.maps[id];
+    return id + ':' + m.name + ':' + m.size + ':' + m.walk.length + ':' + m.exits.length + ':' + (m.pic ? m.pic.key : '') + ':' + (m.kind || '') + ':' + (m.places || []).map((p) => p.to).join('+');
+  }).join(',');
   if (sig !== mapsShown) { mapsShown = sig; panel.renderMaps(); }
   panel.renderKept();
   if (say) ed.note(say);
@@ -77,6 +80,7 @@ on('redo', doRedo);
 on('walk', toggleWalk);
 on('replace-picture', () => $('wp-file-replace').click());
 on('shrink', () => { if (S.walking) stopWalk(); if (S.cur) openShrink(S.cur); });
+on('stop-walk', stopWalk);
 // the camera and speed sliders work on a walk that is going on
 on('tuned', (id) => {
   const f = currentField(), m = S.maps[id];
@@ -194,7 +198,7 @@ for (const k of Object.keys(S.layers)) {
   c.addEventListener('change', () => {
     S.layers[k] = c.checked;
     const s = S.sel;
-    if (s && !c.checked && (s.kind === k || (k === 'exits' && /^(exit|arrival|start)$/.test(s.kind)) || (k === 'people' && /^(person|spot)$/.test(s.kind)))) S.sel = null;
+    if (s && !c.checked && (s.kind === k || (k === 'exits' && /^(exit|arrival|start|place)$/.test(s.kind)) || (k === 'people' && /^(person|spot)$/.test(s.kind)))) S.sel = null;
     S.hover = null;
     if (k === 'reach') checkSoon();
     panel.renderPicked();

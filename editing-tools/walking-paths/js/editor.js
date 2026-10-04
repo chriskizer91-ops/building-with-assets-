@@ -693,7 +693,7 @@ export function deletePicked() {
   if (isShape(s.kind)) { (s.kind === 'front' ? m.front : m[s.kind]).splice(s.i, 1); what = NOUN[s.kind]; }
   else if (s.kind === 'exit') { m.exits.splice(s.i, 1); what = 'way out'; }
   else if (s.kind === 'person') { what = m.people[s.i].name || 'person'; m.people.splice(s.i, 1); }
-  else if (s.kind === 'place') { what = m.places[s.i].name || 'place'; m.places.splice(s.i, 1); }
+  else if (s.kind === 'place') { what = 'the place “' + (m.places[s.i].name || m.places[s.i].id) + '”'; m.places.splice(s.i, 1); }
   else { what = m.spots[s.i].rect ? 'story area' : 'thing'; m.spots.splice(s.i, 1); }
   pick(null);
   changed(cap(what) + ' deleted. Undo brings it back.');

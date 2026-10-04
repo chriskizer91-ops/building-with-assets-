@@ -5,7 +5,7 @@ import { S, changed, remember, mapSize, emit } from './state.js';
 import * as store from './store.js';
 import * as pics from './pictures.js';
 import { clone, isPt, isRect, slug, niceName, extFor, dataURLToBlob, clamp } from './util.js';
-import { bbox, scalePts, inRect } from './geom.js';
+import { bbox, scalePts } from './geom.js';
 
 // the maps file's own fields, in the order they are written
 const KNOWN = ['name', 'kind', 'src', 'size', 'walker', 'zoom', 'pace', 'start', 'walk', 'block', 'front', 'exits', 'people', 'spots', 'places'];
@@ -165,26 +165,38 @@ const uniquePlaceId = (w, base) => {
 };
 
 // Where map `id`'s way out to the world goes: on a walk area's edge that runs along the picture's
-// edge (the one nearest the bottom middle, and not already a way out), or else the bottom middle.
+// edge (the one nearest the bottom middle), or else along the picture's edges from the bottom
+// middle outwards; never over a way out the map has already.
 function door(id) {
   const m = S.maps[id], [W, H] = mapSize(m), h = m.walker;
+  const thick = Math.max(12, Math.round(h * 0.4)), clear = Math.round((h * 8) / 52 + h * 0.6), want = Math.round(h * 2.4);
+  const taken = (r) => m.exits.some((e) => r[0] < e.rect[2] + 4 && r[2] > e.rect[0] - 4 && r[1] < e.rect[3] + 4 && r[3] > e.rect[1] - 4);
+  // a way out `len` long centred on (x, y) along side `sd` (0 left, 1 right, 2 top, 3 bottom), and where she arrives by it
+  const make = (sd, x, y, len) => {
+    const half = Math.round(Math.min(len, want) / 2);
+    const rect = sd === 3 ? [x - half, H - thick, x + half, H] : sd === 2 ? [x - half, 0, x + half, thick] : sd === 0 ? [0, y - half, thick, y + half] : [W - thick, y - half, W, y + half];
+    const arrive = sd === 3 ? [x, H - thick - clear] : sd === 2 ? [x, thick + clear] : sd === 0 ? [thick + clear, y] : [W - thick - clear, y];
+    return { rect: [clamp(Math.round(rect[0]), 0, W), clamp(Math.round(rect[1]), 0, H), clamp(Math.round(rect[2]), 0, W), clamp(Math.round(rect[3]), 0, H)], arrive: [clamp(Math.round(arrive[0]), 0, W), clamp(Math.round(arrive[1]), 0, H)] };
+  };
   const side = (p) => (p[1] >= H ? 3 : p[1] <= 0 ? 2 : p[0] <= 0 ? 0 : p[0] >= W ? 1 : -1);
-  let best = null, bd = Infinity;
+  const along = [];
   for (const pts of m.walk) for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length], sd = side(a);
     if (sd < 0 || sd !== side(b)) continue;
     const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (len < h * 0.5 || m.exits.some((e) => inRect(e.rect, mid[0], mid[1], 2))) continue;
-    const d = (mid[0] - W / 2) ** 2 + (mid[1] - H) ** 2;
-    if (d < bd) { bd = d; best = { side: sd, mid, len }; }
+    if (len >= h * 0.5) along.push({ d: (mid[0] - W / 2) ** 2 + (mid[1] - H) ** 2, door: make(sd, mid[0], mid[1], len) });
   }
-  if (!best) best = { side: 3, mid: [W / 2, H], len: h * 2.4 };
-  const thick = Math.max(12, Math.round(h * 0.4)), half = Math.round(Math.min(best.len, h * 2.4) / 2), clear = Math.round((h * 8) / 52 + h * 0.6);
-  const [x, y] = best.mid;
-  const rect = best.side === 3 ? [x - half, H - thick, x + half, H] : best.side === 2 ? [x - half, 0, x + half, thick]
-    : best.side === 0 ? [0, y - half, thick, y + half] : [W - thick, y - half, W, y + half];
-  const arrive = best.side === 3 ? [x, H - thick - clear] : best.side === 2 ? [x, thick + clear] : best.side === 0 ? [thick + clear, y] : [W - thick - clear, y];
-  return { rect: [clamp(Math.round(rect[0]), 0, W), clamp(Math.round(rect[1]), 0, H), clamp(Math.round(rect[2]), 0, W), clamp(Math.round(rect[3]), 0, H)], arrive: [clamp(Math.round(arrive[0]), 0, W), clamp(Math.round(arrive[1]), 0, H)] };
+  along.sort((a, b) => a.d - b.d);
+  for (const c of along) if (!taken(c.door.rect)) return c.door;
+  const step = want + 12;
+  for (const sd of [3, 2, 0, 1]) {
+    const len = sd >= 2 ? W : H;
+    for (let k = 0; k <= Math.floor(len / 2 / step); k++) for (const sgn of k ? [1, -1] : [1]) {
+      const c = len / 2 + sgn * k * step, d = sd >= 2 ? make(sd, c, 0, want) : make(sd, 0, c, want);
+      if (!taken(d.rect)) return d;
+    }
+  }
+  return make(3, W / 2, H, want); // every edge is full of ways out already
 }
 
 // Link place `p` on world map `world` to map `id`: she arrives just inside that map's way out to
@@ -235,14 +247,26 @@ export function placeFor(world, id) {
   return putOnWorld(world, id, [WW / 2 + ((n % 5) - 2) * WW * 0.08, WH / 2 + (Math.floor(n / 5) % 3) * WH * 0.08], true);
 }
 
-// several maps on the world map at once (just added, say): round its middle, to be dragged where they belong
+// several maps on the world map at once (just added, say), to be dragged where they belong: round
+// its middle, or, when it has flags already, on the free spots furthest from them
 export function connectAll(world, ids) {
-  const w = S.maps[world], [WW, WH] = mapSize(w), n = ids.length, rx = WW * 0.3, ry = WH * 0.28;
+  const w = S.maps[world], [WW, WH] = mapSize(w);
+  ids = ids.filter((id) => id !== world && S.maps[id] && !(w.places || []).some((p) => p.to === id));
+  if (!ids.length) return;
   remember([world, ...ids]);
+  const ring = (k, n, r) => { const a = -Math.PI / 2 + (k / n) * Math.PI * 2; return [WW / 2 + Math.cos(a) * WW * 0.3 * r, WH / 2 + Math.sin(a) * WH * 0.28 * r]; };
+  const flags = (w.places || []).map((p) => p.at), first = !flags.length;
   ids.forEach((id, i) => {
-    if ((w.places || []).some((p) => p.to === id)) return;
-    const a = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2;
-    putOnWorld(world, id, [WW / 2 + Math.cos(a) * rx, WH / 2 + Math.sin(a) * ry], true);
+    let at = ring(i, ids.length, 1);
+    if (!first) {
+      let best = -1;
+      for (const r of [1, 0.6]) for (let k = 0; k < 12; k++) {
+        const p = ring(k + (r < 1 ? 0.5 : 0), 12, r), d = Math.min(...flags.map((q) => Math.hypot(q[0] - p[0], q[1] - p[1])));
+        if (d > best) { best = d; at = p; }
+      }
+    }
+    const pi = putOnWorld(world, id, at, true);
+    flags.push(w.places[pi].at);
   });
 }
 
@@ -514,8 +538,9 @@ export async function loadKept() {
   S.cur = S.maps[rec.cur] ? rec.cur : S.order[0] || null;
   const p = rec.prefs || {};
   if (p.layers && typeof p.layers === 'object') Object.assign(S.layers, p.layers);
-  // (a walker kept before there was a choice was only the old default: the painted Io now)
-  if (typeof p.walker === 'string' && p.walkerChosen) { S.walker = p.walker; S.walkerChosen = true; }
+  // (a walker kept by an older page: its default, Io in pixels, gives way to the painted Io; any
+  // other was picked)
+  if (typeof p.walker === 'string' && (p.walkerChosen || p.walker !== 'io')) { S.walker = p.walker; S.walkerChosen = true; }
   S.showPaths = !!p.showPaths;
   if (p.drawBy === 'hand' || p.drawBy === 'wand') S.drawBy = p.drawBy;
   if (Number.isFinite(p.spread)) S.spread = clamp(Math.round(p.spread), 1, 100);
