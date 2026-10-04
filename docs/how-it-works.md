@@ -94,3 +94,56 @@ CDN files from a folder (for machines that can't reach the CDN).
   crashes, page errors and pages that reach for the internet (`Server` logs those as `internet: <address>`).
   Games that aren't in the build (the private ones) are skipped. The screenshots are uploaded as an artifact and
   a few go on the release page.
+
+## Walking Paths
+
+`walking-paths/` is a separate tool that shares nothing with the console at run time: Envoi on the Longest
+Night's walking-path page (`envoi-game-pass-3/map-paths/` in that repository), rebuilt to work with any picture.
+`tools/build-walking-paths.mjs` bundles it (esbuild) into one page with everything inside: `Walking-Paths.html`
+to keep and open, and `walking-paths.html`, the same page without a `<head>`, to publish as a Claude artifact.
+Like Mooncart it never loads anything from the internet.
+
+| file | what it does |
+|---|---|
+| `js/state.js` | everything the page knows (`S`), a tiny event bus, and undo: each step keeps the maps it is about to change as JSON |
+| `js/project.js` | maps: from a picture, from a maps file (`readMapsFile`, `takeMaps`), to a maps file (`fileMap`), renaming (a key made from the name follows it), resizing, the way back; keeping the work in IndexedDB |
+| `js/editor.js` | the canvas: looking round (drag, wheel, two fingers), hit testing, dragging points and shapes, drawing by taps and by tracing, the wand, putting down ways out, people, things and story areas, drawing it all |
+| `js/panel.js` | the panel: tools, the picked thing's form, the maps list and the picked map's settings, layers and the reach report, the in-page question box |
+| `js/wand.js` | the magic wand (below) |
+| `js/files.js` | adding pictures, opening maps files, and every file it saves |
+| `js/walk.js`, `js/check.js` | "Walk it", and the reach check and stand test, both through the engine |
+| `engine/engine.js` | the walk engine, one plain script: Envoi's field (`src/game/field.js` there) for any map size |
+| `engine/sprites.js` | Io and the town folk as pixel sprites, copied unchanged from Envoi (`src/walk/pixel-io.js`, `src/game/sprites.js`) |
+| `examples/` | Wickhollow and its jetty from Envoi (`src/game/maps.js` and their paintings), the maps it starts with |
+
+**The maps file** is Envoi's `MAPS` (`src/game/maps.js`) with two more fields, so its maps drop into a game built
+the same way: `{ format: "walking-paths", version: 1, about, maps: { key: map } }`, each map
+`{ name, src, size: [w, h], walker, start, walk, block, front: [{ pts, base }], exits: [{ rect, to, at, label }],
+people: [{ id, name, at, look, face0, says }], spots: [things { kind, label, note, at } or story areas
+{ kind, id, label, note, rect }] }`. Points are whole pixels of the map, `size` is the map's size (the picture's,
+unless changed: Envoi's are 1536 x 1024) and `walker` is how tall people are. Any other field a map had when it was
+opened is kept as it was (Envoi's `band`, `music`, `wild`, people's `talk` and `role`...). `src` is the picture as a
+`data:` address in the maps file and the walk-around page, or its file name in "the map data only".
+
+**One set of rules.** The engine is the only place that says where she can stand: a point is free inside a walk
+area, outside every block and away from people; she stands where the point and the points a foot to each side are
+free. Envoi's numbers (6-pixel feet, 12-pixel cells, 58 pixels to talk to someone) are for a 52-pixel Io, so the
+engine scales them all by `walker / 52`. The editor's readout ("she can stand here") and the reach check call the
+engine's `rules`, so they can never disagree with a walk.
+
+**The magic wand** works on a copy of the picture at most 1024 pixels across, blurred twice so cobbles and brush
+strokes read as one colour. From the tap it takes every joined pixel within a colour distance ("redmean") of the
+colour under the finger (6 + 1.3 x spread), closes 1-pixel cracks, then cuts every thread narrower than her feet
+(she couldn't walk along it, and that is how a patch leaks into the next one), keeps the part joined to the tap and
+traces its outline (Moore neighbour tracing, then Douglas-Peucker). Islands inside a walk area become blocks when
+they are bigger than half a person and mostly not the ground's colour; smaller ones, and pools of lamplight on the
+cobbles, are filled in.
+
+**Saving files.** In a web browser a file is an ordinary download. Inside the Claude artifact viewer downloads are
+blocked, so the page asks the viewer to save it (`claude.use("downloads")`, the artifact's `downloads` capability).
+The work in progress is kept in IndexedDB (database `walking-paths`), which a private window or clearing the
+browser's data loses: the page says so and points to the maps file.
+
+`node tools/walking-paths-smoke.mjs` builds it and checks it in Chromium (ending with "all good"): from disk on a
+laptop and a phone, then as the artifact page inside a locked-down frame. The workflow `walking-paths.yml` runs it
+and puts `Walking-Paths.html` on the Releases page under the tag `walking-paths`, so its download link stays the same.

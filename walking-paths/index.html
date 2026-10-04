@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- This page runs the tool straight from these files for working on it (serve the folder: ES modules
+     don't load from file://). tools/build-walking-paths.mjs puts it all in one file, Walking-Paths.html. -->
+<title>Walking Paths</title>
+<link rel="stylesheet" href="walking-paths.css">
+</head>
+<body>
+<div class="wp" id="wp">
+  <header class="wp-bar">
+    <div class="wp-brand">
+      <h1>Walking Paths</h1>
+      <span>Map any painting: where feet can go, what they pass behind, the ways out</span>
+    </div>
+    <div class="wp-bar-tools">
+      <button type="button" id="wp-undo" title="Undo (Ctrl+Z)">Undo</button>
+      <button type="button" id="wp-redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+      <span class="wp-gap" aria-hidden="true"></span>
+      <button type="button" id="wp-zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
+      <button type="button" id="wp-fit" title="Show the whole picture (0)">Whole picture</button>
+      <button type="button" id="wp-zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <span class="wp-gap" aria-hidden="true"></span>
+      <button type="button" id="wp-walk" class="wp-primary" aria-pressed="false" title="Walk round this map (F2)">Walk it</button>
+    </div>
+  </header>
+
+  <main class="wp-main">
+    <div class="wp-stagecol">
+      <div class="wp-stage" id="wp-stage">
+        <canvas class="wp-cv" id="wp-cv" tabindex="0" aria-label="The picture, with the walking paths drawn over it"></canvas>
+        <div class="wp-walk-host" id="wp-walk-host" hidden></div>
+        <div class="wp-plate" id="wp-plate"><span id="wp-plate-name"></span><span class="wp-chip" id="wp-plate-chip" hidden></span></div>
+        <div class="wp-readout" id="wp-readout" hidden></div>
+        <div class="wp-drawbar" id="wp-drawbar" role="group" aria-label="The shape you are drawing" hidden>
+          <span class="wp-drawbar-say" id="wp-drawbar-say"></span>
+          <button type="button" id="wp-draw-done" class="wp-primary">Finish shape</button>
+          <button type="button" id="wp-draw-back">Take back</button>
+          <button type="button" id="wp-draw-cancel">Cancel</button>
+        </div>
+        <div class="wp-empty" id="wp-empty" hidden>
+          <h2>Start with a picture of a map</h2>
+          <p>A painting, a drawing, a photo of one: any picture. Then mark where people can walk on it.</p>
+          <div class="wp-row wp-row-center">
+            <button type="button" class="wp-primary wp-big" id="wp-empty-add">Add a picture…</button>
+            <button type="button" class="wp-big" id="wp-empty-open">Open a maps file…</button>
+          </div>
+          <p class="wp-small">You can also drop pictures here, or paste one (Ctrl+V).</p>
+          <p class="wp-small"><button type="button" class="wp-link" id="wp-empty-examples">Bring back the two example maps</button></p>
+        </div>
+        <div class="wp-drop" id="wp-drop" hidden><p>Drop pictures to add them as maps, or a maps file to open it</p></div>
+        <div class="wp-note" id="wp-note" role="status" aria-live="polite" hidden></div>
+      </div>
+      <p class="wp-help" id="wp-help"></p>
+    </div>
+
+    <aside class="wp-panel" aria-label="Tools, maps and saving">
+      <section class="wp-sec">
+        <h2>Draw and change</h2>
+        <div class="wp-tools" role="group" aria-label="What a tap on the picture does">
+          <button type="button" data-tool="select" aria-pressed="true">Pick and move</button>
+          <button type="button" data-tool="walk"><i class="wp-sw walk"></i>+ Walk area</button>
+          <button type="button" data-tool="block"><i class="wp-sw block"></i>+ Block</button>
+          <button type="button" data-tool="front"><i class="wp-sw front"></i>+ Front</button>
+          <button type="button" data-tool="exit"><i class="wp-sw exit"></i>+ Way out</button>
+          <button type="button" data-tool="person"><i class="wp-sw people"></i>+ Person</button>
+          <button type="button" data-tool="thing"><i class="wp-sw thing"></i>+ Thing</button>
+          <button type="button" data-tool="story"><i class="wp-sw story"></i>+ Story area</button>
+        </div>
+        <div class="wp-drawby" id="wp-drawby" role="group" aria-label="How to draw walk areas, blocks and fronts">
+          <span>Draw shapes</span>
+          <button type="button" data-drawby="hand" aria-pressed="true">By hand</button>
+          <button type="button" data-drawby="wand" aria-pressed="false">✨ Magic wand</button>
+        </div>
+        <div class="wp-wand" id="wp-wand" hidden>
+          <label for="wp-spread">How far it spreads <b id="wp-spread-val">40</b></label>
+          <input type="range" id="wp-spread" min="1" max="100" value="40">
+          <p class="wp-small" id="wp-wand-say">Tap the ground in the picture: the wand finds the patch of the same colour round it and outlines it. Too little? Spread it further. Too much? Less. Tap again to add more ground.</p>
+        </div>
+        <p class="wp-small" id="wp-tool-help"></p>
+        <div class="wp-picked" id="wp-picked"></div>
+        <div class="wp-row" id="wp-shape-row">
+          <button type="button" id="wp-smooth" title="Round the picked shape's corners">Smooth</button>
+          <button type="button" id="wp-fewer" title="Take out points that hardly change the shape">Fewer points</button>
+          <button type="button" id="wp-delete" title="Delete the picked point or thing (Delete)">Delete</button>
+        </div>
+      </section>
+
+      <section class="wp-sec">
+        <h2>Maps</h2>
+        <ul class="wp-maps" id="wp-maps"></ul>
+        <div class="wp-row">
+          <button type="button" id="wp-add" class="wp-primary">Add pictures…</button>
+          <button type="button" id="wp-remove-examples" hidden>Remove the examples</button>
+        </div>
+        <div class="wp-mapset" id="wp-mapset"></div>
+      </section>
+
+      <section class="wp-sec">
+        <h2>Show on the picture</h2>
+        <div class="wp-layers">
+          <label><input type="checkbox" id="wp-l-walk"><i class="wp-sw walk"></i>Walk areas: where feet can go</label>
+          <label><input type="checkbox" id="wp-l-block"><i class="wp-sw block"></i>Blocks: cut out of the walk areas</label>
+          <label><input type="checkbox" id="wp-l-front"><i class="wp-sw front"></i>Fronts: drawn over whoever walks behind</label>
+          <label><input type="checkbox" id="wp-l-exits"><i class="wp-sw exit"></i>Ways out, and where people arrive</label>
+          <label><input type="checkbox" id="wp-l-people"><i class="wp-sw people"></i>People, things and story areas</label>
+          <label><input type="checkbox" id="wp-l-reach"><i class="wp-sw reach"></i>Where she can reach</label>
+        </div>
+        <div class="wp-reach" id="wp-reach"></div>
+        <div class="wp-walkset">
+          <label class="wp-field"><span>Who walks</span><select id="wp-walker"></select></label>
+          <label class="wp-check"><input type="checkbox" id="wp-showpaths">Show the paths while walking</label>
+        </div>
+      </section>
+
+      <section class="wp-sec">
+        <h2>Save and share</h2>
+        <p class="wp-small" id="wp-kept"></p>
+        <div class="wp-row">
+          <button type="button" id="wp-save" class="wp-primary">Save the maps file</button>
+          <button type="button" id="wp-open">Open a maps file…</button>
+        </div>
+        <p class="wp-small">The maps file has every map with its picture inside. Open it here again to carry on, or give it to Claude to put the maps in a game.</p>
+        <div class="wp-exports">
+          <button type="button" id="wp-copy">Copy the map data</button>
+          <button type="button" id="wp-save-data">Save the map data only</button>
+          <button type="button" id="wp-save-picture">Save a picture of this map</button>
+          <button type="button" id="wp-save-mask">Save its walk mask</button>
+          <button type="button" id="wp-save-page">Save a walk-around page</button>
+        </div>
+        <p class="wp-small" id="wp-export-say">The walk-around page is one file you can open anywhere, or add to Mooncart, to walk round these maps.</p>
+        <p class="wp-status" id="wp-status" role="status" aria-live="polite"></p>
+        <textarea class="wp-copybox" id="wp-copybox" rows="6" readonly hidden aria-label="The map data, ready to copy"></textarea>
+      </section>
+    </aside>
+  </main>
+
+  <div class="wp-dialog" id="wp-dialog" role="dialog" aria-modal="true" aria-labelledby="wp-dialog-title" hidden>
+    <div class="wp-dialog-card">
+      <h2 id="wp-dialog-title"></h2>
+      <p id="wp-dialog-text"></p>
+      <div class="wp-row" id="wp-dialog-buttons"></div>
+    </div>
+  </div>
+  <input type="file" id="wp-file-pictures" accept="image/*" multiple hidden>
+  <input type="file" id="wp-file-open" accept=".json,application/json,image/*" multiple hidden>
+  <input type="file" id="wp-file-replace" accept="image/*" hidden>
+</div>
+<script id="wp-engine-sprites" src="engine/sprites.js"></script>
+<script id="wp-engine" src="engine/engine.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

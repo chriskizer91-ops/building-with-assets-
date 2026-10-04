@@ -11,6 +11,9 @@ on a laptop, as one file you open in a web browser.
 
 ![Playing Wickhollow Square on Mooncart](docs/screenshots/console-playing.jpg)
 
+This repository also has **[Walking Paths](#walking-paths-mapping-your-painted-maps)**, a tool for marking
+where people can walk on a painted map and saving it for a game.
+
 ## Put it on a phone
 
 1. On the Android phone, open **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**.
@@ -111,6 +114,39 @@ It fetches every game repository fresh, builds the ones that need building, pack
 plays some of the games on an Android emulator, and puts the new `.apk` on the Releases page. Installing it
 over the old one keeps your saves.
 
+## Walking Paths: mapping your painted maps
+
+![Walking Paths with Wickhollow's walking paths drawn on it](docs/screenshots/walking-paths.jpg)
+
+Walking Paths is a separate tool kept in this repository: Envoi's walking-path page, made to work with
+any picture. Add a picture of a map, mark where people can walk on it, walk someone round it to try
+it, and save the mapped maps for a game.
+
+**Get it:** download **[Walking-Paths.html](https://github.com/chriskizer91-ops/building-with-assets-/releases/download/walking-paths/Walking-Paths.html)**
+and open it in a web browser, on a laptop or a phone. It needs no internet. It starts with two of
+Envoi's maps, Wickhollow and its jetty, as examples (**Remove the examples** when you're done with them).
+
+1. **Add pictures…** (or drop pictures on it, or paste one). Each picture becomes a map.
+2. Draw on it, under *Draw and change*:
+   - **+ Walk area** (green): where feet can go. Tap round it point by point, or trace round it with a
+     finger. Or set *Draw shapes* to **✨ Magic wand** and tap the ground: it outlines the patch of the same
+     colour. *How far it spreads* makes the patch bigger or smaller; tap again to add more ground.
+   - **+ Block** (red): spots cut out of the walk areas, like a well or a stall.
+   - **+ Front** (purple): parts of the picture drawn over people who walk behind them, like a lamp post or a
+     tree. Drag its diamond to the line where people pass behind it.
+   - **+ Way out** (blue): drag a box where people leave the map, then pick where it leads.
+     **Make the way back** puts the way back on the other map for you.
+   - **+ Person**, **+ Thing**, **+ Story area**: someone to talk to, something to look at, a place where
+     something happens. Give each a name (and what they say, or what she sees) in the panel.
+3. **Walk it**: walk round with the arrow keys, or the arrows on the screen, or tap where to go. Ways out take
+   her to the other maps. *Where she can reach* (under *Show on the picture*) lists anything she can't get to.
+4. **Save the maps file**: every map with its picture inside. Open it here again to carry on (on this or another
+   computer or phone), or give it to Claude to put the maps in a game. There is also *Copy the map data* (to paste
+   to Claude), a picture of the map with the paths on it, its walk mask (white where feet can go), and a
+   **walk-around page**: one file that walks round your maps, which you can add to Mooncart.
+
+Your maps are kept in that web browser as you work, but only the maps file keeps them for good.
+
 ## For developers
 
 ```
@@ -125,6 +161,9 @@ tools/          collect-games.mjs  gather and pack the games into build/collecti
                 web-smoke.mjs      check the browser version in Chromium
                 phone-test.sh      install on an emulator or phone with adb and play some games
                 make-icons.mjs     draw the app icon
+                build-walking-paths.mjs   Walking Paths as one file, Walking-Paths.html
+                walking-paths-smoke.mjs   check Walking Paths in Chromium
+walking-paths/  Walking Paths: plain HTML, CSS and JavaScript modules (see docs/how-it-works.md)
 ```
 
 Run it on a computer:
@@ -134,6 +173,7 @@ node tools/collect-games.mjs --local ..      # games from checkouts next to this
 node tools/dev-server.mjs                    # then open http://localhost:8090
 node tools/smoke.mjs                         # with the server running
 npm install && node tools/web-smoke.mjs      # the browser version
+node tools/walking-paths-smoke.mjs           # Walking Paths: builds it and checks it
 bash android/build.sh                        # needs the Android SDK (platform 35)
 ```
 

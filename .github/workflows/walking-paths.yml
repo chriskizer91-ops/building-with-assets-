@@ -1,0 +1,74 @@
+# Builds Walking Paths (walking-paths/) into one file, Walking-Paths.html, and checks it in Chromium
+# (tools/walking-paths-smoke.mjs). On the main branch, or when run by hand with "publish", it puts the
+# file on the Releases page under the tag walking-paths, so its download link never changes:
+# https://github.com/chriskizer91-ops/building-with-assets-/releases/download/walking-paths/Walking-Paths.html
+# That release is never marked "latest": the latest release stays Mooncart's.
+name: Build Walking Paths
+
+on:
+  push:
+    paths: ['walking-paths/**', 'tools/build-walking-paths.mjs', 'tools/walking-paths-smoke.mjs', 'package.json', 'package-lock.json', '.github/workflows/walking-paths.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Put Walking-Paths.html on the Releases page'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: walking-paths-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tools (esbuild, and Chromium for the check)
+        run: |
+          npm ci
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Build Walking-Paths.html and check it (must end with "all good")
+        run: node tools/walking-paths-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Walking-Paths
+          path: build/walking-paths/Walking-Paths.html
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: walking-paths-screenshots
+          path: build/walking-paths-smoke/*.png
+          retention-days: 30
+      - name: Put it on the Releases page
+        if: github.event_name == 'workflow_dispatch' && inputs.publish || github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Walking Paths
+
+          Download **Walking-Paths.html** below and open it in a web browser, on a laptop or a phone. It needs no internet.
+
+          Add a picture of a map, mark where people can walk on it (by hand, or with the magic wand), walk someone round it to try it, and save the maps file: every map with its picture inside, ready for a game. It can also save a walk-around page you can add to Mooncart.
+
+          The pictures below show this exact build in Chromium, on a laptop and on a phone.
+          NOTES
+          echo "Built from ${GITHUB_SHA::7}." >> notes.md
+          S=build/walking-paths-smoke
+          gh release delete walking-paths --cleanup-tag --yes || true
+          gh release create walking-paths --target "$GITHUB_SHA" --title "Walking Paths" --notes-file notes.md --latest=false \
+            "build/walking-paths/Walking-Paths.html" \
+            "$S/01-laptop-examples.png#On a laptop" \
+            "$S/03-laptop-wand.png#The magic wand" \
+            "$S/10-phone-start.png#On a phone" \
+            "$S/12-phone-walking.png#Walking on a phone"

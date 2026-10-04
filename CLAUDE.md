@@ -7,6 +7,9 @@ Chris's games built in, made to keep working offline for decades. The same conso
 web browser (`Mooncart.html` for laptops, and a demo page), where people add their own games.
 `README.md` is for Chris; `docs/how-it-works.md` is for whoever works on it next.
 
+This repository also has Walking Paths (`walking-paths/`): a separate one-file tool, Envoi's walking-path page made
+to work with any picture. The same rules apply to it: no internet, plain words, something Chris can open on his phone.
+
 ## Rules
 
 - This is the only repository to write to for Mooncart. The game repositories (`20-min`,
@@ -31,3 +34,6 @@ For the browser version (the demo artifact and `Mooncart.html`): `node tools/web
 also ending with "all good".
 
 The GitHub workflow builds the APK and `Mooncart.html`, and runs `tools/phone-test.sh` on an emulator; look at its screenshots.
+
+For Walking Paths: `node tools/walking-paths-smoke.mjs`, ending with "all good"; look at its screenshots in
+`build/walking-paths-smoke/`. Its workflow (`walking-paths.yml`) puts `Walking-Paths.html` on the Releases page.

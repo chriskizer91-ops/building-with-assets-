@@ -1,0 +1,377 @@
+#!/usr/bin/env node
+/* global WalkingPaths, WalkingPathsEngine */ // (the page's own globals, used inside page.evaluate)
+// Checks Walking Paths in Chromium (Playwright): builds it (tools/build-walking-paths.mjs), opens
+// Walking-Paths.html straight from disk the way you would, and works through it: the examples,
+// drawing by tapping and by tracing, undo, the magic wand on a made-up picture, people, things,
+// ways out between maps, walking (and walking through a way out), every file it saves, opening a
+// maps file, and that the work is still there after a reload. Then the artifact page inside a
+// locked-down frame, as the artifact host shows it. Screenshots go to build/walking-paths-smoke/.
+//
+//   node tools/walking-paths-smoke.mjs        (must end with "all good")
+
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OUT = path.join(ROOT, 'build', 'walking-paths-smoke');
+fs.rmSync(OUT, { recursive: true, force: true });
+fs.mkdirSync(OUT, { recursive: true });
+execFileSync(process.execPath, [path.join(ROOT, 'tools/build-walking-paths.mjs')], { stdio: 'inherit' });
+const BUILT = path.join(ROOT, 'build/walking-paths');
+
+let pw;
+try { pw = await import('playwright'); } catch { pw = await import('/opt/node-tools/node_modules/playwright/index.mjs'); }
+const browser = await pw.chromium.launch();
+const problems = [];
+const check = (ok, what) => { console.log((ok ? '  ok   ' : '  FAIL ') + what); if (!ok) problems.push(what); };
+
+async function open(url, viewport, touch, ctxIn) {
+  const ctx = ctxIn || await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: touch, acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('console', (m) => { const t = m.text(); if (/Content Security Policy|Refused to/.test(t) || (m.type() === 'error' && !/Failed to load resource|favicon/.test(t))) errors.push(t.slice(0, 300)); });
+  page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' ')));
+  await page.goto(url);
+  return { ctx, page, errors };
+}
+const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.ready === '1', null, { timeout: 20000 });
+const state = (page, fn, arg) => page.evaluate(fn, arg);
+const counts = (page) => state(page, () => { const m = WalkingPaths.S.maps[WalkingPaths.S.cur]; return { walk: m.walk.length, block: m.block.length, front: m.front.length, exits: m.exits.length, people: m.people.length, spots: m.spots.length, maps: WalkingPaths.S.order.length, cur: WalkingPaths.S.cur }; });
+// where map point (x, y) is on the screen
+const onScreen = (page, x, y) => state(page, ([x, y]) => {
+  const r = document.getElementById('wp-cv').getBoundingClientRect(), v = WalkingPaths.ed.view;
+  return [r.left + (x - v.x) * v.z, r.top + (y - v.y) * v.z];
+}, [x, y]);
+async function clickMap(page, x, y, opts) { const [sx, sy] = await onScreen(page, x, y); await page.mouse.click(sx, sy, opts); await page.waitForTimeout(60); }
+async function saved(page, button) {
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click(button)]);
+  const file = path.join(OUT, dl.suggestedFilename());
+  await dl.saveAs(file);
+  return file;
+}
+
+// a made-up map picture: a sand-coloured cross of paths on dark grass, a grey well in the middle of
+// it, drawn by the browser itself (no image tools needed)
+async function testPicture(page) {
+  const b64 = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 800; c.height = 500;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1f3a1c'; g.fillRect(0, 0, 800, 500);
+    g.fillStyle = '#c9a36a'; g.fillRect(0, 200, 800, 120); g.fillRect(330, 0, 140, 500);
+    g.fillStyle = '#5b5f66'; g.beginPath(); g.arc(400, 260, 34, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < 2000; i++) { g.fillStyle = 'rgba(0,0,0,0.06)'; g.fillRect((i * 97) % 800, (i * 61) % 500, 3, 3); }
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  return { name: 'crossroads_test-map.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
+}
+
+// =================================================================================================
+console.log('Walking-Paths.html, opened from disk, on a laptop');
+const FILE_URL = pathToFileURL(path.join(BUILT, 'Walking-Paths.html')).href;
+let { ctx, page, errors } = await open(FILE_URL, { width: 1280, height: 800 }, false);
+await ready(page);
+await page.waitForTimeout(600);
+let c = await counts(page);
+check(c.maps === 2 && c.cur === 'wickhollow', 'it starts with the two examples, Wickhollow on screen');
+check(c.walk === 9 && c.block === 8 && c.front === 10 && c.exits === 3 && c.people === 3, 'Wickhollow has its walking paths from Envoi');
+check(await state(page, () => document.getElementById('wp-plate-name').textContent === 'Wickhollow'), 'the name plate says Wickhollow');
+await page.screenshot({ path: path.join(OUT, '01-laptop-examples.png') });
+
+// drawing by clicking points: a walk area in the top left corner of the painting
+await page.click('[data-tool="walk"]');
+for (const [x, y] of [[60, 60], [200, 60], [200, 160], [60, 160]]) await clickMap(page, x, y);
+check((await state(page, () => WalkingPaths.S.draft && WalkingPaths.S.draft.length)) === 4, 'four clicks put down four points');
+check(await page.isVisible('#wp-drawbar'), 'the bar for the shape being drawn shows');
+await page.click('#wp-draw-done');
+c = await counts(page);
+check(c.walk === 10, 'Finish shape adds the walk area');
+check(await state(page, () => WalkingPaths.S.tool === 'select' && WalkingPaths.S.sel && WalkingPaths.S.sel.kind === 'walk' && WalkingPaths.S.sel.i === 9), 'the new walk area is picked, ready to adjust');
+
+// tracing round a shape with the mouse held down; coming back to the start closes it
+await page.click('[data-tool="block"]');
+{
+  const pts = [[100, 80], [180, 80], [180, 140], [100, 140], [101, 82]];
+  const [sx, sy] = await onScreen(page, ...pts[0]);
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  for (const [x, y] of pts.slice(1)) {
+    const [a, b] = await onScreen(page, x, y);
+    await page.mouse.move(a, b, { steps: 12 });
+  }
+  await page.mouse.up();
+}
+c = await counts(page);
+check(c.block === 9, 'tracing round and back to the start makes a block');
+
+// undo and redo
+await page.click('#wp-undo');
+check((await counts(page)).block === 8, 'Undo takes the block away');
+await page.click('#wp-redo');
+check((await counts(page)).block === 9, 'Redo brings it back');
+await page.keyboard.press('Control+z');
+await page.keyboard.press('Control+z');
+c = await counts(page);
+check(c.block === 8 && c.walk === 9, 'Ctrl+Z twice takes back both new shapes');
+
+// a person, named in the panel
+await page.click('[data-tool="person"]');
+await clickMap(page, 760, 700);
+c = await counts(page);
+check(c.people === 4, 'a tap with + Person puts someone down');
+await page.fill('#wp-picked input[type="text"]', 'Old Tam');
+await page.keyboard.press('Tab');
+check(await state(page, () => { const p = WalkingPaths.S.maps.wickhollow.people[3]; return p.name === 'Old Tam' && p.id === 'old-tam'; }), 'naming them in the panel sets their name and key');
+
+// a thing to look at
+await page.click('[data-tool="thing"]');
+await clickMap(page, 900, 720);
+await page.fill('#wp-picked input[type="text"]', 'A signpost');
+await page.fill('#wp-picked textarea', 'North to the hills, east to the sea.');
+await page.keyboard.press('Tab');
+check(await state(page, () => { const s = WalkingPaths.S.maps.wickhollow.spots.at(-1); return s.label === 'A signpost' && s.note === 'North to the hills, east to the sea.' && s.kind === 'look'; }), 'a thing gets its name and what she sees');
+
+// a way out to the jetty, pulled out as a box, then pointed at the jetty
+await page.click('[data-tool="exit"]');
+{
+  const [a, b] = await onScreen(page, 1400, 600), [x2, y2] = await onScreen(page, 1460, 660);
+  await page.mouse.move(a, b); await page.mouse.down(); await page.mouse.move(x2, y2, { steps: 6 }); await page.mouse.up();
+}
+c = await counts(page);
+check(c.exits === 4, 'dragging with + Way out makes a way out');
+await page.selectOption('#wp-exit-to', 'jetty');
+check(await state(page, () => { const e = WalkingPaths.S.maps.wickhollow.exits[3]; return e.to === 'jetty' && Array.isArray(e.at) && e.label === 'The jetty'; }), 'choosing where it leads sets the place and where she arrives');
+await page.screenshot({ path: path.join(OUT, '02-laptop-way-out.png') });
+
+// the reach check
+await page.check('#wp-l-reach');
+await page.waitForFunction(() => /reach/.test(document.getElementById('wp-reach').textContent) && !/Checking/.test(document.getElementById('wp-reach').textContent), null, { timeout: 10000 });
+const reachSay = await page.textContent('#wp-reach');
+check(/can’t reach|can reach everything/.test(reachSay), 'the reach check reports: ' + reachSay.slice(0, 90));
+await page.uncheck('#wp-l-reach');
+
+// a new picture becomes a new map; the magic wand outlines its paths, with the well as a block
+await page.setInputFiles('#wp-file-pictures', await testPicture(page));
+await page.waitForFunction(() => WalkingPaths.S.order.length === 3, null, { timeout: 10000 });
+c = await counts(page);
+check(c.cur === 'crossroads-test-map', 'the picture is a new map named from its file (' + c.cur + ')');
+check(await state(page, () => { const m = WalkingPaths.S.maps[WalkingPaths.S.cur]; return m.size[0] === 800 && m.size[1] === 500 && m.walker === 25; }), 'its size is the picture’s, and people are a sensible height on it');
+await page.click('[data-tool="walk"]');
+await page.click('[data-drawby="wand"]');
+await clickMap(page, 150, 260);
+await page.waitForFunction(() => WalkingPaths.S.maps[WalkingPaths.S.cur].walk.length === 1, null, { timeout: 10000 }).catch(() => {});
+c = await counts(page);
+check(c.walk === 1, 'one tap of the wand on the sand outlines a walk area');
+check(c.block === 1, 'the well inside the cross comes back as a block');
+const wandShape = await state(page, () => {
+  const m = WalkingPaths.S.maps[WalkingPaths.S.cur], R = WalkingPathsEngine.rules, w = m.walk[0];
+  const inside = (x, y) => R.inPoly(w, x, y) && !m.block.some((b) => R.inPoly(b, x, y));
+  return { pts: w.length, path: inside(100, 260) && inside(400, 60) && inside(700, 260) && inside(400, 450), grass: !inside(100, 80) && !inside(700, 420), well: !inside(400, 260), edges: w.some((p) => p[0] === 0) && w.some((p) => p[0] === 800) && w.some((p) => p[1] === 0) && w.some((p) => p[1] === 500) };
+});
+check(wandShape.path && wandShape.grass, 'the outline follows the paths and leaves out the grass (' + wandShape.pts + ' points)');
+check(wandShape.well, 'the well is cut out of it');
+check(wandShape.edges, 'where the paths run off the picture, the outline reaches the edge exactly');
+// a smaller spread redoes the same outline
+await page.fill('#wp-spread', '10');
+await page.dispatchEvent('#wp-spread', 'change');
+await page.waitForTimeout(600);
+check((await counts(page)).walk === 1, 'changing the spread redoes the last outline instead of adding another');
+await page.click('[data-drawby="hand"]');
+await page.screenshot({ path: path.join(OUT, '03-laptop-wand.png') });
+
+// a way out off its right edge to the jetty, and the way back made in one go
+await page.click('[data-tool="exit"]');
+await clickMap(page, 790, 260);
+await page.selectOption('#wp-exit-to', 'jetty');
+const across = await state(page, () => WalkingPaths.S.maps['crossroads-test-map'].exits[0].at);
+check(across[0] < 768, 'leaving by the right edge, she arrives on the left half of the jetty, where she can stand (' + across + ')');
+await page.click('text=Make the way back from The jetty');
+const back = await state(page, () => {
+  const j = WalkingPaths.S.maps.jetty, e = j.exits.find((x) => x.to === 'crossroads-test-map'), at = WalkingPaths.S.maps['crossroads-test-map'].exits[0].at;
+  return e && { rect: e.rect, back: e.at, clear: !(at[0] >= e.rect[0] - 8 && at[0] <= e.rect[2] + 8 && at[1] >= e.rect[1] - 8 && at[1] <= e.rect[3] + 8) };
+});
+check(!!back, 'Make the way back puts a way out on the jetty leading back');
+check(back && back.clear && back.back[0] < 775, 'she arrives clear of it on the jetty, and comes back clear of the way out she left by');
+
+// rename the new map: its key follows its name
+await page.fill('#wp-map-name', 'The Crossroads');
+await page.keyboard.press('Tab');
+check(await state(page, () => WalkingPaths.S.cur === 'the-crossroads' && WalkingPaths.S.maps['the-crossroads'].name === 'The Crossroads'), 'renaming the map renames its key too');
+check(await state(page, () => WalkingPaths.S.maps.jetty.exits.some((e) => e.to === 'the-crossroads')), 'and the jetty’s way back follows the new key');
+await page.keyboard.press('Control+z');
+await page.keyboard.press('Control+z');
+check(await state(page, () => WalkingPaths.S.cur === 'crossroads-test-map' && !WalkingPaths.S.maps['the-crossroads']), 'and undo puts both back');
+await page.keyboard.press('Control+y');
+await page.keyboard.press('Control+y');
+
+// walking: on Wickhollow, through the way out to the jetty
+await page.click('.wp-maps li:first-child .wp-map-pick');
+check((await counts(page)).cur === 'wickhollow', 'picking Wickhollow in the list shows it');
+await page.click('#wp-walk');
+await page.waitForFunction(() => WalkingPaths.field() && WalkingPaths.field().mapId === 'wickhollow', null, { timeout: 10000 });
+await page.waitForTimeout(500);
+const p0 = await state(page, () => [WalkingPaths.field().me.x, WalkingPaths.field().me.y]);
+await page.keyboard.down('ArrowDown');
+await page.waitForTimeout(700);
+await page.keyboard.up('ArrowDown');
+const p1 = await state(page, () => [WalkingPaths.field().me.x, WalkingPaths.field().me.y]);
+check(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 20, 'the arrow keys walk her (' + Math.round(Math.hypot(p1[0] - p0[0], p1[1] - p0[1])) + ' px)');
+await page.screenshot({ path: path.join(OUT, '04-laptop-walking.png') });
+// to the way out on the left (to the jetty), by asking her to walk there
+await state(page, () => WalkingPaths.field().walkTo(8, 733));
+await page.waitForFunction(() => WalkingPaths.field().mapId === 'jetty', null, { timeout: 20000 }).catch(() => {});
+check(await state(page, () => WalkingPaths.field().mapId === 'jetty'), 'walking into the way out takes her to the jetty');
+await page.waitForTimeout(700);
+await page.screenshot({ path: path.join(OUT, '05-laptop-jetty.png') });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+check(await state(page, () => !WalkingPaths.S.walking && WalkingPaths.S.cur === 'jetty' && !!WalkingPaths.S.lastWalk.jetty), 'Esc goes back to editing, on the map where she stopped');
+
+// every file it saves
+const mapsFile = await saved(page, '#wp-save');
+const data = JSON.parse(fs.readFileSync(mapsFile, 'utf8'));
+check(data.format === 'walking-paths' && Object.keys(data.maps).length === 3, 'the maps file has all three maps (' + path.basename(mapsFile) + ')');
+check(Object.values(data.maps).every((m) => /^data:image\//.test(m.src)), 'with their pictures inside');
+const w = data.maps.wickhollow;
+check(w.walk.length === 9 && w.people.some((p) => p.name === 'Old Tam') && w.exits[3].to === 'jetty' && w.band === 1 && w.music === 'town', 'and everything on them, Envoi’s own fields too');
+const dataFile = await saved(page, '#wp-save-data');
+const data2 = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+check(data2.maps.jetty.src === 'jetty.avif' && !/data:/.test(fs.readFileSync(dataFile, 'utf8')), 'the map data on its own names the pictures instead');
+const pic = await saved(page, '#wp-save-picture');
+check(fs.readFileSync(pic).subarray(1, 4).toString() === 'PNG' && fs.statSync(pic).size > 50000, 'a picture of the map with the paths on it (' + path.basename(pic) + ')');
+const mask = await saved(page, '#wp-save-mask');
+check(fs.readFileSync(mask).subarray(1, 4).toString() === 'PNG', 'its walk mask (' + path.basename(mask) + ')');
+await page.evaluate(() => navigator.clipboard && navigator.clipboard.writeText && 0);
+await page.click('#wp-copy');
+await page.waitForTimeout(300);
+const copySay = await page.textContent('#wp-status');
+check(/Copied|already picked/.test(copySay), 'Copy the map data copies it, or shows it ready to copy');
+const walkPage = await saved(page, '#wp-save-page');
+check(/\.html$/.test(walkPage), 'a walk-around page (' + path.basename(walkPage) + ', ' + Math.round(fs.statSync(walkPage).size / 1024) + ' KB)');
+await page.screenshot({ path: path.join(OUT, '06-laptop-saved.png') });
+check(!errors.length, 'no errors on the page' + (errors.length ? ': ' + errors.join(' | ') : ''));
+
+// the walk-around page on its own
+{
+  const w2 = await open(pathToFileURL(walkPage).href, { width: 900, height: 600 }, false, ctx);
+  await w2.page.waitForTimeout(1200);
+  const before = await w2.page.evaluate(() => document.querySelector('.wpe-plate') && document.querySelector('.wpe-plate').textContent);
+  check(before === 'The jetty', 'the walk-around page starts on the map that was on screen (' + before + ')');
+  await w2.page.keyboard.down('ArrowUp');
+  await w2.page.waitForTimeout(500);
+  await w2.page.keyboard.up('ArrowUp');
+  await w2.page.keyboard.press('m');
+  await w2.page.waitForTimeout(300);
+  check(await w2.page.isVisible('text=Go to a map'), 'M lists the maps to jump between');
+  await w2.page.screenshot({ path: path.join(OUT, '07-walk-around-page.png') });
+  check(!w2.errors.length, 'no errors on the walk-around page' + (w2.errors.length ? ': ' + w2.errors.join(' | ') : ''));
+  await w2.page.close();
+}
+
+// the work is still there after closing and opening the page again
+await page.reload();
+await ready(page);
+c = await counts(page);
+check(c.maps === 3 && c.cur === 'jetty', 'after a reload the three maps are still there, the jetty on screen (' + c.maps + ', ' + c.cur + ')');
+check(await state(page, () => WalkingPaths.S.maps.wickhollow.people.some((p) => p.name === 'Old Tam')), 'with the changes made to them');
+await page.waitForTimeout(500);
+check(await state(page, () => { const i = document.querySelector('.wp-maps img'); return !!i && i.complete && i.naturalWidth > 0; }), 'and their pictures');
+
+// opening the maps file again, beside what is there
+await page.setInputFiles('#wp-file-open', mapsFile);
+await page.waitForSelector('#wp-dialog:not([hidden])');
+await page.click('#wp-dialog-buttons button:first-child');
+await page.waitForFunction(() => WalkingPaths.S.order.length === 6, null, { timeout: 10000 }).catch(() => {});
+c = await counts(page);
+check(c.maps === 6, 'opening the maps file beside them adds its three maps (keys made different)');
+check(await state(page, () => WalkingPaths.S.maps['wickhollow-2'] && WalkingPaths.S.maps['wickhollow-2'].exits[2].to === 'jetty-2'), 'and their ways out lead to each other, not to the old ones');
+await page.setInputFiles('#wp-file-open', mapsFile);
+await page.waitForSelector('#wp-dialog:not([hidden])');
+await page.click('#wp-dialog-buttons button:nth-child(2)');
+await page.waitForFunction(() => WalkingPaths.S.order.length === 3, null, { timeout: 10000 }).catch(() => {});
+check((await counts(page)).maps === 3, 'or instead of them');
+check(!errors.length, 'still no errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+await ctx.close();
+
+// =================================================================================================
+console.log('On a phone (390 x 844, touch)');
+({ ctx, page, errors } = await open(FILE_URL, { width: 390, height: 844 }, true));
+await ready(page);
+await page.waitForTimeout(800);
+await page.screenshot({ path: path.join(OUT, '10-phone-start.png') });
+await page.screenshot({ path: path.join(OUT, '11-phone-panel.png'), fullPage: true });
+const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+check(wide, 'nothing is wider than the phone');
+// a tap with + Walk area, a tap of the gold first point to close
+await page.tap('[data-tool="walk"]');
+for (const [x, y] of [[60, 60], [300, 60], [300, 200]]) { const [sx, sy] = await onScreen(page, x, y); await page.touchscreen.tap(sx, sy); await page.waitForTimeout(80); }
+{ const [sx, sy] = await onScreen(page, 60, 60); await page.touchscreen.tap(sx, sy); }
+await page.waitForTimeout(200);
+check((await counts(page)).walk === 10, 'tapping three points and then the first one makes a walk area');
+// two fingers spread apart zoom in, even with + Walk area on (the second finger calls off the trace
+// the first one started)
+await page.tap('[data-tool="walk"]');
+const pinched = await state(page, () => {
+  const cv = document.getElementById('wp-cv'), r = cv.getBoundingClientRect(), z0 = WalkingPaths.ed.view.z;
+  const ev = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: id === 11, clientX: r.left + x, clientY: r.top + y, bubbles: true, button: 0, buttons: 1 }));
+  ev('pointerdown', 11, 150, 150); ev('pointerdown', 12, 200, 150);
+  for (let k = 1; k <= 10; k++) { ev('pointermove', 11, 150 - k * 6, 150); ev('pointermove', 12, 200 + k * 6, 150); }
+  ev('pointerup', 11, 90, 150); ev('pointerup', 12, 260, 150);
+  return { z0, z1: WalkingPaths.ed.view.z, walk: WalkingPaths.S.maps.wickhollow.walk.length, draft: WalkingPaths.S.draft };
+});
+check(pinched.z1 > pinched.z0 * 1.5 && pinched.walk === 10 && !pinched.draft, 'two fingers spread apart zoom in, and draw nothing (' + pinched.z0.toFixed(2) + ' → ' + pinched.z1.toFixed(2) + ')');
+await page.tap('#wp-walk');
+await page.waitForTimeout(1500);
+await page.screenshot({ path: path.join(OUT, '12-phone-walking.png') });
+const pad = await page.$('.wpe-pad .w');
+const q0 = await state(page, () => WalkingPaths.field().me.x);
+const box = await pad.boundingBox();
+await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+await page.dispatchEvent('.wpe-pad', 'pointerdown', { pointerId: 7, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2, isPrimary: true });
+await page.waitForTimeout(600);
+await page.dispatchEvent('.wpe-pad', 'pointerup', { pointerId: 7 });
+const q1 = await state(page, () => WalkingPaths.field().me.x);
+check(q1 < q0 - 10, 'holding the d-pad’s left arrow walks her left');
+await page.tap('.wpe-menu');
+await page.waitForTimeout(300);
+check(await state(page, () => !WalkingPaths.S.walking), '“Back to editing” ends the walk');
+check(!errors.length, 'no errors on the phone' + (errors.length ? ': ' + errors.join(' | ') : ''));
+await ctx.close();
+
+// =================================================================================================
+console.log('The artifact page, in a locked-down frame (roughly the artifact viewer)');
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+  "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; worker-src 'self' blob:";
+const server = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname === '/') {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    return res.end('<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style>' +
+      '<iframe sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" src="/test.html"></iframe>');
+  }
+  const f = path.join(BUILT, decodeURIComponent(u.pathname));
+  if (!f.startsWith(BUILT) || !fs.existsSync(f)) { res.writeHead(404); return res.end('not found'); }
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': CSP, 'cache-control': 'no-store' });
+  fs.createReadStream(f).pipe(res);
+});
+await new Promise((r) => server.listen(0, r));
+({ ctx, page, errors } = await open(`http://localhost:${server.address().port}/`, { width: 1200, height: 780 }, false));
+let frame = null;
+for (let i = 0; i < 100 && !frame; i++) { frame = page.frames().find((f) => /\/test\.html$/.test(f.url())); if (!frame) await page.waitForTimeout(100); }
+await frame.waitForFunction(() => document.documentElement.dataset.ready === '1', null, { timeout: 20000 });
+await page.waitForTimeout(800);
+check(await frame.evaluate(() => WalkingPaths.S.order.length === 2), 'it starts with the examples there too');
+await frame.click('#wp-walk');
+await page.waitForTimeout(1200);
+check(await frame.evaluate(() => !!WalkingPaths.field() && WalkingPaths.field().mapId === 'wickhollow'), 'walking works there');
+await page.screenshot({ path: path.join(OUT, '20-artifact.png') });
+check(!errors.length, 'no errors or blocked loads in the frame' + (errors.length ? ': ' + errors.join(' | ') : ''));
+await ctx.close();
+server.close();
+
+await browser.close();
+console.log(problems.length ? '\n' + problems.length + ' problem(s):\n  ' + problems.join('\n  ') : '\nall good');
+process.exit(problems.length ? 1 : 0);
