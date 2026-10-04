@@ -26,6 +26,7 @@ function renderAll(forceForm) {
 let mapsShown = '';
 on('changed', (say) => {
   if (S.sel && !ed.valid(S.sel)) S.sel = null;
+  if (S.hover && !ed.valid(S.hover)) S.hover = null;
   keepSoon();
   checkSoon();
   panel.renderBar();
@@ -42,7 +43,7 @@ on('picked', () => { panel.renderPicked(); panel.renderBar(); });
 on('draft', () => { panel.renderPicked(); panel.renderBar(); });
 on('tool', () => { panel.renderTools(); panel.renderPicked(); panel.renderBar(); });
 on('layers', () => panel.renderLayers());
-on('walking', () => { panel.renderBar(); panel.renderTools(); if (!S.walking) { mapsShown = ''; panel.renderMaps(); keepSoon(); } });
+on('walking', () => { panel.renderBar(); panel.renderTools(); if (!S.walking) { mapsShown = ''; renderAll(true); keepSoon(); } });
 const WAND_SAY = $('wp-wand-say').textContent;
 on('wand', (busy) => { $('wp-wand-say').textContent = busy ? 'Looking round the picture…' : WAND_SAY; });
 
@@ -77,6 +78,7 @@ on('replace-picture', () => $('wp-file-replace').click());
 
 function afterHistory(say, was) {
   if (S.sel && !ed.valid(S.sel)) S.sel = null;
+  S.hover = null;
   S.draft = null;
   panel.forgetForm();
   if (S.cur !== was) ed.showView();
@@ -85,6 +87,7 @@ function afterHistory(say, was) {
   renderAll(true);
 }
 function doUndo() {
+  if (ed.busy()) return;
   if (S.walking) stopWalk();
   if (S.draft) { ed.takeBack(); return; }
   const was = S.cur;
@@ -92,6 +95,7 @@ function doUndo() {
   afterHistory('Undone.', was);
 }
 function doRedo() {
+  if (ed.busy()) return;
   if (S.walking) stopWalk();
   if (S.draft) return;
   const was = S.cur;

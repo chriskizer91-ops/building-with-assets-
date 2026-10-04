@@ -3,7 +3,7 @@
 // along the top. Saving and opening files are in files.js.
 
 import { S, map, mapSize, remember, changed, emit, on, canUndo, canRedo } from './state.js';
-import { arrivalsInto, mapName, renameMap, resizeMap, deleteMap, wayBack, keepNow } from './project.js';
+import { arrivalsInto, mapName, renameMap, keyAfterRename, resizeMap, deleteMap, wayBack, keepNow } from './project.js';
 import { pictureURL } from './pictures.js';
 import { reachNow, checkSoon, arrivalFor } from './check.js';
 import * as ed from './editor.js';
@@ -97,10 +97,11 @@ function textBox(parent, label, value, onInput, opts = {}) {
   if (opts.list) inp.setAttribute('list', opts.list);
   if (opts.placeholder) inp.placeholder = opts.placeholder;
   inp.value = value == null ? '' : String(value);
+  const owner = S.cur;
   let kept = false;
   inp.addEventListener('focus', () => { kept = false; });
   inp.addEventListener('input', () => {
-    if (!kept) { remember(opts.ids ? opts.ids() : [S.cur]); kept = true; }
+    if (!kept) { remember(opts.ids ? opts.ids() : [owner]); kept = true; }
     onInput(inp.value);
     S.rev++;
     emit('moving');
@@ -250,7 +251,7 @@ function exitForm(form, m, i) {
 }
 
 function personForm(form, m, i) {
-  const p = m.people[i];
+  const p = m.people[i], owner = S.cur;
   textBox(form, 'Name', p.name, (v) => {
     // a key that came from the name follows it
     const follows = /^person-\d+$/.test(p.id) || p.id === slug(p.name);
@@ -267,14 +268,14 @@ function personForm(form, m, i) {
   for (const l of looks) el('option', { value: l }, sel, LOOK_NAMES[l] || l);
   if (p.look && !looks.includes(p.look)) el('option', { value: p.look }, sel, p.look);
   sel.value = p.look || 'hooded';
-  sel.addEventListener('change', () => { remember(); p.look = sel.value; changed(''); });
+  sel.addEventListener('change', () => { remember([owner]); p.look = sel.value; changed(''); });
   const faces = el('div', { class: 'wp-field' }, form);
   el('span', null, faces, 'Faces');
   const row = el('div', { class: 'wp-faces' }, faces);
   for (const [d, t] of [['s', '↓ down'], ['w', '← left'], ['e', '→ right'], ['n', '↑ up']]) {
     const b = el('button', { type: 'button', 'aria-pressed': (p.face0 || 's') === d ? 'true' : 'false' }, row, t);
     b.addEventListener('click', () => {
-      remember();
+      remember([owner]);
       if (d === 's') delete p.face0; else p.face0 = d;
       row.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
       changed('');
@@ -336,7 +337,7 @@ export function renderMaps() {
   renderMapSettings();
 }
 
-let armedDelete = 0;
+let armed = null; // { id, timer }: "Delete this map" was tapped once
 export function renderMapSettings() {
   const box = $('wp-mapset'), m = map();
   box.textContent = '';
@@ -349,23 +350,23 @@ export function renderMapSettings() {
   el('span', null, nf, 'Name');
   const name = el('input', { type: 'text', maxlength: 80, id: 'wp-map-name' }, nf);
   name.value = m.name;
-  let before = m.name, typing = false;
-  name.addEventListener('focus', () => { before = m.name; typing = false; });
+  // (shown as you type; kept, with one undo step for the name and the key, when you leave the box)
+  let before = m.name;
+  name.addEventListener('focus', () => { before = m.name; });
   name.addEventListener('input', () => {
-    if (!typing) { remember([id]); typing = true; }
     m.name = name.value;
     S.rev++;
     $('wp-plate-name').textContent = m.name;
     ed.draw();
   });
   name.addEventListener('change', () => {
-    if (!S.maps[id]) return;
+    if (S.maps[id] !== m) return;
     const v = name.value.trim() || before;
     m.name = before;
-    const leading = S.order.filter((k) => S.maps[k].exits.some((e) => e.to === id));
-    const nid = renameMap(id, v, (newId) => remember([id, newId, ...leading]));
-    if (nid !== id) S.cur = nid;
-    typing = false;
+    if (v === before) { name.value = v; S.rev++; return; }
+    const nid = keyAfterRename(id, v), leading = S.order.filter((k) => S.maps[k].exits.some((e) => e.to === id));
+    remember([...new Set([id, nid, ...leading])]);
+    if (renameMap(id, v) !== id) S.cur = nid;
     changed('');
     emit('maps');
   });
@@ -387,11 +388,15 @@ export function renderMapSettings() {
   const hi = el('input', { type: 'number', min: 16, max: 20000, step: 1, value: h, id: 'wp-map-h' }, hb);
   const apply = el('button', { type: 'button', disabled: true }, sizeRow, 'Use this size');
   const keepRatio = m.pic ? m.pic.h / m.pic.w : h / w;
-  wi.addEventListener('input', () => { hi.value = String(Math.round(Number(wi.value) * keepRatio) || ''); apply.disabled = Number(wi.value) === w && Number(hi.value) === h; });
-  hi.addEventListener('input', () => { apply.disabled = Number(wi.value) === w && Number(hi.value) === h; });
+  const sizeOk = () => {
+    const a = Number(wi.value), b = Number(hi.value);
+    return wi.value !== '' && hi.value !== '' && a >= 16 && b >= 16 && a <= 20000 && b <= 20000 && !(Math.round(a) === w && Math.round(b) === h);
+  };
+  wi.addEventListener('input', () => { if (wi.value !== '') hi.value = String(Math.round(Number(wi.value) * keepRatio)); apply.disabled = !sizeOk(); });
+  hi.addEventListener('input', () => { apply.disabled = !sizeOk(); });
   apply.addEventListener('click', () => {
-    const nw = clamp(Math.round(Number(wi.value)), 16, 20000), nh = clamp(Math.round(Number(hi.value)), 16, 20000);
-    if (!nw || !nh) return;
+    if (!sizeOk()) return;
+    const nw = Math.round(Number(wi.value)), nh = Math.round(Number(hi.value));
     remember([id, ...S.order.filter((k) => S.maps[k].exits.some((e) => e.to === id))]);
     resizeMap(id, nw, nh);
     changed('Map size now ' + nw + ' × ' + nh + ': everything on it stretched to match.');
@@ -404,8 +409,8 @@ export function renderMapSettings() {
   const tall = el('input', { type: 'number', min: 4, max: 2000, step: 1, id: 'wp-map-walker' }, tf);
   tall.value = m.walker;
   tall.addEventListener('change', () => {
-    const v = clamp(Math.round(Number(tall.value)), 4, 2000);
-    if (!v || v === m.walker) { tall.value = m.walker; return; }
+    const v = tall.value === '' ? NaN : clamp(Math.round(Number(tall.value)), 4, 2000);
+    if (!Number.isFinite(v) || v === m.walker || S.maps[id] !== m) { tall.value = m.walker; return; }
     remember([id]);
     m.walker = v;
     changed('People are now ' + v + ' pixels tall on this map. The little figure at the start shows it.');
@@ -413,15 +418,17 @@ export function renderMapSettings() {
   el('p', { class: 'wp-small' }, box, 'It sets how wide a path must be to walk along, and how big people look on a walk.');
   // deleting it (twice, to be sure)
   const del = el('button', { type: 'button', class: 'wp-danger' }, box, 'Delete this map');
+  if (armed && armed.id === id) { del.textContent = 'Sure? Tap again to delete ' + m.name; del.classList.add('is-armed'); }
   del.addEventListener('click', () => {
-    if (!armedDelete) {
+    if (!armed || armed.id !== id || S.maps[id] !== m) {
+      if (armed) clearTimeout(armed.timer);
       del.textContent = 'Sure? Tap again to delete ' + m.name;
       del.classList.add('is-armed');
-      armedDelete = setTimeout(() => { armedDelete = 0; del.textContent = 'Delete this map'; del.classList.remove('is-armed'); }, 4000);
+      armed = { id, timer: setTimeout(() => { armed = null; del.textContent = 'Delete this map'; del.classList.remove('is-armed'); }, 4000) };
       return;
     }
-    clearTimeout(armedDelete);
-    armedDelete = 0;
+    clearTimeout(armed.timer);
+    armed = null;
     const was = m.name;
     deleteMap(id);
     changed(was + ' deleted. Undo brings it back.');

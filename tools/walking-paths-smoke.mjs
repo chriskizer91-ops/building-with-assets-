@@ -146,6 +146,44 @@ await page.selectOption('#wp-exit-to', 'jetty');
 check(await state(page, () => { const e = WalkingPaths.S.maps.wickhollow.exits[3]; return e.to === 'jetty' && Array.isArray(e.at) && e.label === 'The jetty'; }), 'choosing where it leads sets the place and where she arrives');
 await page.screenshot({ path: path.join(OUT, '02-laptop-way-out.png') });
 
+// nudging: Shift+arrow, undo, Shift+arrow again: the second nudge is its own undo step
+{
+  const at = () => state(page, () => WalkingPaths.S.maps.wickhollow.people[3].at.slice());
+  await page.click('[data-tool="select"]');
+  await clickMap(page, 760, 700);
+  const p0 = await at();
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Shift+ArrowDown');
+  const p1 = await at();
+  await page.keyboard.press('Control+z');
+  const p2 = await at();
+  check(p1[0] === p0[0] && p1[1] === p0[1] + 1 && p2[0] === p0[0] && p2[1] === p0[1], 'a nudge after an undo is a step of its own (' + p0 + ' → ' + p1 + ' → ' + p2 + ')');
+  // Ctrl+Z in the middle of dragging her dot is ignored; the drag is one undo step
+  const [sx, sy] = await onScreen(page, ...p0);
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move(sx + 30, sy + 10, { steps: 5 });
+  await page.keyboard.press('Control+z');
+  await page.mouse.move(sx + 40, sy + 20, { steps: 5 });
+  await page.mouse.up();
+  const p3 = await at();
+  await page.keyboard.press('Control+z');
+  const p4 = await at();
+  check(p3[0] > p0[0] + 20 && p4[0] === p0[0] && p4[1] === p0[1], 'Ctrl+Z during a drag waits; afterwards it takes back the whole drag');
+}
+
+// a shape deleted while the mouse rests on one of its corners
+await page.click('[data-tool="walk"]');
+for (const [x, y] of [[1300, 80], [1420, 80], [1420, 180], [1300, 180]]) await clickMap(page, x, y);
+await page.click('#wp-draw-done');
+{ const [sx, sy] = await onScreen(page, 1420, 180); await page.mouse.move(sx, sy); }
+await page.waitForTimeout(100);
+await page.keyboard.press('Delete');
+{ const [sx, sy] = await onScreen(page, 1420, 180); await page.mouse.move(sx + 1, sy); }
+await page.waitForTimeout(150);
+check(!errors.length && (await counts(page)).walk === 9, 'deleting a shape under the mouse leaves the picture drawing fine');
+
 // the reach check
 await page.check('#wp-l-reach');
 await page.waitForFunction(() => /reach/.test(document.getElementById('wp-reach').textContent) && !/Checking/.test(document.getElementById('wp-reach').textContent), null, { timeout: 10000 });
@@ -202,14 +240,14 @@ await page.keyboard.press('Tab');
 check(await state(page, () => WalkingPaths.S.cur === 'the-crossroads' && WalkingPaths.S.maps['the-crossroads'].name === 'The Crossroads'), 'renaming the map renames its key too');
 check(await state(page, () => WalkingPaths.S.maps.jetty.exits.some((e) => e.to === 'the-crossroads')), 'and the jetty’s way back follows the new key');
 await page.keyboard.press('Control+z');
-await page.keyboard.press('Control+z');
-check(await state(page, () => WalkingPaths.S.cur === 'crossroads-test-map' && !WalkingPaths.S.maps['the-crossroads']), 'and undo puts both back');
-await page.keyboard.press('Control+y');
+check(await state(page, () => WalkingPaths.S.cur === 'crossroads-test-map' && !WalkingPaths.S.maps['the-crossroads'] && WalkingPaths.S.maps['crossroads-test-map'].name === 'Crossroads test map'), 'and one undo puts both back');
 await page.keyboard.press('Control+y');
 
 // walking: on Wickhollow, through the way out to the jetty
 await page.click('.wp-maps li:first-child .wp-map-pick');
 check((await counts(page)).cur === 'wickhollow', 'picking Wickhollow in the list shows it');
+await state(page, () => { WalkingPaths.S.sel = { kind: 'exit', i: 2 }; WalkingPaths.panel.renderPicked(true); });
+check(/Way out/.test(await page.textContent('#wp-picked')), 'Wickhollow’s way out to the jetty is picked before the walk');
 await page.click('#wp-walk');
 await page.waitForFunction(() => WalkingPaths.field() && WalkingPaths.field().mapId === 'wickhollow', null, { timeout: 10000 });
 await page.waitForTimeout(500);
@@ -229,6 +267,7 @@ await page.screenshot({ path: path.join(OUT, '05-laptop-jetty.png') });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 check(await state(page, () => !WalkingPaths.S.walking && WalkingPaths.S.cur === 'jetty' && !!WalkingPaths.S.lastWalk.jetty), 'Esc goes back to editing, on the map where she stopped');
+check(!/Way out/.test(await page.textContent('#wp-picked')) && (await page.inputValue('#wp-map-name')) === 'The jetty', 'and the panel is about that map, not Wickhollow’s way out');
 
 // every file it saves
 const mapsFile = await saved(page, '#wp-save');
@@ -293,6 +332,31 @@ await page.waitForSelector('#wp-dialog:not([hidden])');
 await page.click('#wp-dialog-buttons button:nth-child(2)');
 await page.waitForFunction(() => WalkingPaths.S.order.length === 3, null, { timeout: 10000 }).catch(() => {});
 check((await counts(page)).maps === 3, 'or instead of them');
+check(await state(page, () => WalkingPaths.S.order.every((id) => /^[\w.-]{1,60}$/.test(WalkingPaths.S.maps[id].pic.file))), 'pictures that came inside the file are named after their maps');
+{
+  const town = (name) => ({ name: name + '.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ maps: { town: { name, size: [300, 200], walk: [[[0, 0], [300, 0], [300, 200], [0, 200]]], exits: [{ rect: [0, 0, 10, 10], to: 'town', at: [150, 100] }] } } })) });
+  await page.setInputFiles('#wp-file-open', [town('Town A'), town('Town B')]);
+  await page.waitForSelector('#wp-dialog:not([hidden])');
+  await page.click('#wp-dialog-buttons button:first-child');
+  await page.waitForFunction(() => WalkingPaths.S.order.length === 5, null, { timeout: 10000 }).catch(() => {});
+  const towns = await state(page, () => WalkingPaths.S.order.filter((id) => /^town/.test(id)).map((id) => [id, WalkingPaths.S.maps[id].name, WalkingPaths.S.maps[id].exits[0].to]));
+  check(towns.length === 2 && towns[0][1] !== towns[1][1] && towns.every(([id, , to]) => id === to), 'two files that both have a map called “town” open as two maps, each leading to itself (' + JSON.stringify(towns) + ')');
+  await page.keyboard.press('Control+z');
+}
+await page.click('.wp-maps li:nth-child(2) .wp-map-pick');
+await page.click('#wp-mapset .wp-danger');
+await page.click('.wp-maps li:nth-child(1) .wp-map-pick');
+await page.click('#wp-mapset .wp-danger');
+check((await counts(page)).maps === 3 && /Sure/.test(await page.textContent('#wp-mapset .wp-danger')), '“Delete this map” asks again on another map before deleting it');
+await page.fill('#wp-map-w', '');
+check(await page.isDisabled('#wp-mapset button:has-text("Use this size")'), 'an empty width can’t be used as a size');
+// a walk stopped at once, on a map with nowhere to stand
+await page.setInputFiles('#wp-file-pictures', { name: 'blank.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64') });
+await page.waitForFunction(() => WalkingPaths.S.order.length === 4, null, { timeout: 10000 }).catch(() => {});
+await page.keyboard.press('F2');
+await page.keyboard.press('F2');
+await page.waitForTimeout(500);
+check(!errors.length, 'starting and stopping a walk at once is fine' + (errors.length ? ': ' + errors.join(' | ') : ''));
 check(!errors.length, 'still no errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 

@@ -376,6 +376,13 @@ function up(e) {
 }
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
+// the pointer was taken away without being let go (the canvas hidden, the window left): call it off
+cv.addEventListener('lostpointercapture', (e) => {
+  if (!fingers.has(e.pointerId)) return;
+  fingers.delete(e.pointerId);
+  if (pinch && fingers.size < 2) pinch = null;
+  if (act && act.id === e.pointerId) { const a = act; act = null; callOff(a); cursor(); draw(); }
+});
 cv.addEventListener('pointerleave', (e) => {
   if (!act && e.pointerType === 'mouse') { S.hover = null; mouse = null; readout(); draw(); }
 });
@@ -540,13 +547,15 @@ async function runWand(p) {
   try { res = await wand(m.pic.key, m.size, [p.x, p.y], S.spread, kind === 'walk', m.walker); }
   catch { res = { error: 'The wand couldn’t read this picture.' }; }
   finally { wanding = false; emit('wand', false); }
-  if (S.cur !== id || S.walking || S.tool !== kind) return;
+  if (S.cur !== id || S.walking || S.tool !== kind || !S.maps[id]) return;
   if (res.error) { note(res.error); return; }
-  remember();
-  const list = kind === 'front' ? m.front : m[kind];
+  // (undo can have put back a different copy of the map while the wand was looking)
+  const now = S.maps[id];
+  remember([id]);
+  const list = kind === 'front' ? now.front : now[kind];
   list.push(kind === 'front' ? { pts: res.outer, base: bbox(res.outer)[3] } : res.outer);
   let holes = 0;
-  if (kind === 'walk') for (const h of res.holes) { m.block.push(h); holes++; }
+  if (kind === 'walk') for (const h of res.holes) { now.block.push(h); holes++; }
   S.sel = { kind, i: list.length - 1 };
   emit('picked');
   const big = res.share > 0.55 ? ' It spread over most of the picture: try a smaller spread.' : '';
@@ -556,12 +565,16 @@ async function runWand(p) {
 // the spread changed: the last wand outline again, wider or narrower, if nothing changed since
 export function rewand() {
   if (!lastWand || lastWand.id !== S.cur || lastWand.rev !== S.rev || S.tool !== lastWand.kind || wanding) return false;
+  const at = lastWand.at;
   dropLast();
-  S.rev++;
-  runWand(lastWand.at);
+  S.sel = null;
+  changed('');
+  runWand(at);
   return true;
 }
 export const wandBusy = () => wanding;
+// a finger or the mouse is in the middle of something on the picture
+export const busy = () => !!pinch || (!!act && act.type !== 'pan' && act.type !== 'ignore');
 
 // ---------------------------------------------------------------------------------------------
 // putting down ways out, story areas, people and things
@@ -674,7 +687,7 @@ export function fewerPicked() {
 }
 
 // Shift + arrows move the picked thing a pixel at a time (one undo step for a run of them)
-let nudgeT = 0, nudgeKey = '';
+let nudgeT = 0, nudgeKey = '', nudgeRev = -1;
 function nudge(dx, dy) {
   const m = map(), s = S.sel;
   if (!s || !valid(s)) return;
@@ -691,11 +704,12 @@ function nudge(dx, dy) {
     if (!fits(r)) return;
     move = () => { r[0] += dx; r[2] += dx; r[1] += dy; r[3] += dy; };
   } else move = () => { const q = pointOf(m, s), n = snapPt(q[0] + dx, q[1] + dy); q[0] = n[0]; q[1] = n[1]; };
-  if (now - nudgeT > 800 || key !== nudgeKey) remember(mapsOf(s));
+  if (now - nudgeT > 800 || key !== nudgeKey || S.rev !== nudgeRev) remember(mapsOf(s));
   nudgeT = now;
   nudgeKey = key;
   move();
   changed('');
+  nudgeRev = S.rev;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -708,6 +722,7 @@ window.addEventListener('keydown', (e) => {
   const t = e.target && e.target.tagName;
   if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
   const ctrl = e.ctrlKey || e.metaKey, k = e.key && e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (busy() && (ctrl || k === 'Delete' || k === 'Backspace' || k === 'Enter' || (e.shiftKey && ARROWS[k]))) { e.preventDefault(); return; }
   if (ctrl && k === 'z') { e.preventDefault(); emit(e.shiftKey ? 'redo' : 'undo'); return; }
   if (ctrl && k === 'y') { e.preventDefault(); emit('redo'); return; }
   if (ctrl || e.altKey || !map()) return;
@@ -904,7 +919,7 @@ function paint() {
       g.fillStyle = on ? C.gold : '#ffffff'; g.fillRect(sx(q[0]) - s / 2, sy(q[1]) - s / 2, s, s);
     });
   }
-  if (S.hover && S.hover.drag === 'vertex' && !(S.sel && S.sel.kind === S.hover.kind && S.sel.i === S.hover.i)) {
+  if (S.hover && S.hover.drag === 'vertex' && valid(S.hover) && !(S.sel && S.sel.kind === S.hover.kind && S.sel.i === S.hover.i)) {
     const q = shapeOf(m, S.hover.kind, S.hover.i)[S.hover.sub];
     if (q) { g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.strokeRect(sx(q[0]) - 5, sy(q[1]) - 5, 10, 10); }
   }

@@ -9,7 +9,7 @@ import { bbox, scalePts } from './geom.js';
 
 // the maps file's own fields, in the order they are written
 const KNOWN = ['name', 'src', 'size', 'walker', 'start', 'walk', 'block', 'front', 'exits', 'people', 'spots'];
-const INTERNAL = new Set(['pic', 'example', 'id', 'wantPicture']);
+const INTERNAL = new Set(['pic', 'example', 'wantPicture']);
 
 // how tall someone walking is, in map pixels: Envoi's Io is 52 on a 1024-pixel-high painting
 export const defaultWalker = (w, h) => Math.max(8, Math.round((Math.min(w, h) * 52) / 1024));
@@ -132,17 +132,20 @@ export function addMap(m, id) {
 
 // a new name; a map whose key was made from its old name gets a key made from the new one, and the
 // ways out that lead to it follow
-export function renameMap(id, name, beforeRekey) {
+export function keyAfterRename(id, name) {
   const m = S.maps[id];
   if (!m) return id;
-  const old = m.name, made = slug(old);
-  m.name = name;
+  const made = slug(m.name);
   const auto = /^map(-\d+)?$/.test(id) || (made && (id === made || new RegExp('^' + made + '-\\d+$').test(id)));
-  if (!auto) return id;
-  const nid = uniqueId(name, id);
-  if (nid === id || !slug(name)) return id;
-  if (beforeRekey) beforeRekey(nid);
-  return rekey(id, nid);
+  if (!auto || !slug(name)) return id;
+  return uniqueId(name, id);
+}
+export function renameMap(id, name) {
+  const m = S.maps[id];
+  if (!m) return id;
+  const nid = keyAfterRename(id, name);
+  m.name = name;
+  return nid === id ? id : rekey(id, nid);
 }
 
 export function rekey(id, nid) {
@@ -265,7 +268,7 @@ export async function attachPictures(entries, files) {
       const size = await pics.measure(blob);
       if (size) {
         const key = await pics.addPicture(blob);
-        e.map.pic = { key, type: blob.type || '', file: blob.name || e.src.split(/[\\/]/).pop() || '', w: size.w, h: size.h };
+        e.map.pic = { key, type: blob.type || '', file: blob.name || (e.src.startsWith('data:') ? e.id + '.' + extFor(blob.type) : e.src.split(/[\\/]/).pop()), w: size.w, h: size.h };
         continue;
       }
     }
@@ -280,25 +283,32 @@ export async function attachPictures(entries, files) {
 export function takeMaps(entries, replace) {
   // a file's own keys stay as they are (a game's code uses them); a key that is taken gets -2, -3...
   // and the ways out between the new maps follow
-  const taken = new Set(replace ? [] : Object.keys(S.maps)), rename = {};
+  // (entries carry `group`: the file they came from; keys are only matched within one file)
+  const taken = new Set(replace ? [] : Object.keys(S.maps)), renames = new Map();
   for (const e of entries) {
     const root = String(e.id).trim() || 'map';
     let nid = root, n = 2;
     while (taken.has(nid)) nid = root + '-' + n++;
     taken.add(nid);
-    rename[e.id] = nid;
+    e.newId = nid;
+    if (!renames.has(e.group)) renames.set(e.group, {});
+    renames.get(e.group)[e.id] = nid;
   }
-  remember(replace ? [...S.order, ...Object.values(rename)] : Object.values(rename));
+  const ids = entries.map((e) => e.newId);
+  remember(replace ? [...S.order, ...ids] : ids);
   if (replace) { S.maps = {}; S.order = []; }
   for (const e of entries) {
-    S.maps[rename[e.id]] = e.map;
-    S.order.push(rename[e.id]);
+    S.maps[e.newId] = e.map;
+    S.order.push(e.newId);
   }
-  for (const e of entries) for (const x of e.map.exits) if (rename[x.to] && x.to !== rename[x.to]) x.to = rename[x.to];
-  S.cur = rename[entries[0].id];
+  for (const e of entries) {
+    const rename = renames.get(e.group);
+    for (const x of e.map.exits) if (Object.prototype.hasOwnProperty.call(rename, x.to)) x.to = rename[x.to];
+  }
+  S.cur = ids[0];
   S.sel = null;
   S.draft = null;
-  return entries.map((e) => rename[e.id]);
+  return ids;
 }
 
 // ---------------------------------------------------------------------------------------------

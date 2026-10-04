@@ -41,7 +41,8 @@ export function changed(say) {
 
 // ---------------------------------------------------------------------------------------------
 // Undo: each step keeps, as text, the maps it is about to change (null for a map that doesn't
-// exist yet), the list's order and the map on screen. Undoing puts them back.
+// exist yet), the list's order, the map on screen and what was picked on it. Undoing puts them
+// back (what was picked is by its place in a list, so it only makes sense with its own maps).
 
 const undos = [], redos = [];
 const LIMIT = 200;
@@ -49,7 +50,7 @@ const LIMIT = 200;
 function snapshot(ids) {
   const maps = {};
   for (const id of ids) maps[id] = S.maps[id] ? JSON.stringify(S.maps[id]) : null;
-  return { maps, order: S.order.slice(), cur: S.cur };
+  return { maps, order: S.order.slice(), cur: S.cur, sel: S.sel ? Object.assign({}, S.sel) : null };
 }
 
 // call before changing the maps `ids` (the current map when left out)
@@ -69,6 +70,7 @@ function restore(step) {
   for (const id of Object.keys(S.maps)) if (!S.order.includes(id)) S.order.push(id);
   if (step.cur && S.maps[step.cur]) S.cur = step.cur;
   else if (!S.maps[S.cur]) S.cur = S.order[0] || null;
+  S.sel = step.cur === S.cur && step.sel ? Object.assign({}, step.sel) : null;
 }
 
 export function undo() {

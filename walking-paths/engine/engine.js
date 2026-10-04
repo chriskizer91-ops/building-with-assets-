@@ -399,7 +399,7 @@
     function load(id, at, dir) {
       const m = maps[id];
       if (!m) return Promise.reject(new Error('There is no map called ' + id + '.'));
-      map = m; mapId = id;
+      map = m; mapId = id; pic = null;
       rules = standTest(m); G = grid(m, rules);
       route = null; aim = null; keys.clear(); padDirs.clear(); tap.id = null; inExit = null; inStory = null;
       talk.hidden = true;

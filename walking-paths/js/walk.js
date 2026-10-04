@@ -10,7 +10,7 @@ import { $ } from './util.js';
 let field = null;
 
 export async function startWalk() {
-  if (S.walking || !map() || !window.WalkingPathsEngine) return;
+  if (S.walking || !map() || !window.WalkingPathsEngine || ed.busy()) return;
   ed.cancelDraft(false);
   const id = S.cur, [cx, cy] = ed.viewCentre();
   const at = nearestStand(id, cx, cy) || map().start;
@@ -32,10 +32,12 @@ export async function startWalk() {
     onMenu: stopWalk,
     onEscape: stopWalk,
   });
+  const f = field;
   try {
-    await field.load(id, at, 's');
-    if (!nearestStand(id, at[0], at[1])) field.note('There is nowhere on this map she can stand yet: draw a walk area first.');
+    await f.load(id, at, 's');
+    if (field === f && !nearestStand(id, at[0], at[1])) f.note('There is nowhere on this map she can stand yet: draw a walk area first.');
   } catch (e) {
+    if (field !== f) return;
     stopWalk();
     ed.note('Walking couldn’t start: ' + (e && e.message ? e.message : e));
   }

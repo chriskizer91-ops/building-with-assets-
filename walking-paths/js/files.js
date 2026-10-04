@@ -248,9 +248,12 @@ export async function openFiles(files) {
   const jsons = files.filter(isJson), pictures = files.filter(isPicture);
   if (!jsons.length) return addPictures(pictures);
   let entries = [];
-  for (const f of jsons) {
-    try { entries = entries.concat(readMapsFile(await f.text())); }
-    catch (e) { status('Couldn’t open ' + f.name + ': ' + e.message + '.', 'bad'); return []; }
+  for (const [k, f] of jsons.entries()) {
+    try {
+      const got = readMapsFile(await f.text());
+      for (const e of got) e.group = k; // ways out only lead to maps of the same file
+      entries = entries.concat(got);
+    } catch (e) { status('Couldn’t open ' + f.name + ': ' + e.message + '.', 'bad'); return []; }
   }
   status('Opening ' + plural(entries.length, 'map', 'maps') + '…');
   const { missing, used } = await attachPictures(entries, pictures);
