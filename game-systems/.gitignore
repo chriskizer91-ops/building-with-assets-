@@ -1,1 +1,3 @@
 stripped/
+tools/node_modules/
+tools/package*.json
