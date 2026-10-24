@@ -1,35 +1,939 @@
 {
-  "about": "The games built into Mooncart. tools/collect-games.mjs downloads each source repository, runs its build when it has one, packs anything the pages load from the internet into the pages themselves, and writes the result to build/collection/ for the app. Edit this list to change what ships inside the app. 'folder' is where the game appears in the library; 'name' overrides the game's own title; 'saveKey' picks its save slot (games with the same slot share saved progress); 'opts' sets how it plays at first (e.g. frame: false to hide the console round a game that draws its own). A source's 'paths' fetches only those files; 'build' runs that command in it first.",
-  "sources": {
-    "map": { "repo": "chriskizer91-ops/what_the_map_forgot", "paths": ["/what-the-map-forgot.html"] },
-    "witchway": { "repo": "chriskizer91-ops/follow-me-down-witch-way", "build": ["python3", "tools/build_single.py"] },
-    "aether": { "repo": "chriskizer91-ops/20-min", "paths": ["/dist/*.html"] },
-    "aethermoor": { "repo": "chriskizer91-ops/New-game", "paths": ["/*.html"] },
-    "envoi": { "repo": "chriskizer91-ops/envoi-on-the-longest-night", "build": ["node", "tools/build.mjs"] }
+ "about": "The games built into Mooncart. tools/collect-games.mjs downloads each source repository, runs its build when it has one, packs anything the pages load from the internet into the pages themselves, and writes the result to build/collection/ for the app. Edit this list to change what ships inside the app. 'folder' is where the game appears in the library; 'name' overrides the game's own title; 'saveKey' picks its save slot (games with the same slot share saved progress); 'opts' sets how it plays at first (e.g. frame: false to hide the console round a game that draws its own). A source's 'paths' fetches only those files; 'build' runs that command in it first. 'addScripts' puts scripts a page fetches by itself (three.js) into it; 'with' copies folders a page reads pictures from next to it; 'ref' picks a branch.",
+ "sources": {
+  "map": {
+   "repo": "chriskizer91-ops/what_the_map_forgot",
+   "ref": "ccr-0e38fb14-hkvksa",
+   "paths": [
+    "/what-the-map-forgot.html",
+    "/hatchling/hatchling.html",
+    "/hatchling/demos/*.html",
+    "/hatchling-v2/hatchling.html",
+    "/hatchling-v2/demos/*.html",
+    "/hatchling/demos/src/sprites/",
+    "/hatchling-v2/demos/src/sprites/",
+    "/hatchling-v2/img/"
+   ]
   },
-  "games": [
-    { "source": "map", "file": "what-the-map-forgot.html", "folder": "", "opts": { "frame": false } },
-
-    { "source": "witchway", "file": "dist/Follow_Me_Down_Witch_Way.html", "folder": "Follow Me Down Witch Way", "saveKey": "follow-me-down-witch-way" },
-    { "source": "witchway", "file": "materials/Witch-Way-Bundle/Game/Witch_Way_-_Path_Polish_-_2026-09-27.html", "folder": "Follow Me Down Witch Way/Earlier versions", "name": "Witch Way: Path Polish (27 Sept)", "saveKey": "witch-way-path-polish" },
-    { "source": "witchway", "file": "materials/Follow_Me_Down_Witch_Way.html", "folder": "Follow Me Down Witch Way/Earlier versions", "name": "Witch Way: first version", "saveKey": "witch-way-first-version" },
-
-    { "source": "aether", "file": "dist/title.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/wickhollow.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/wickhollow-square.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/gloamwood.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/bogmire.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/airship.html", "folder": "Moonlight in the Aether", "saveKey": "moonlight-the-magpie" },
-    { "source": "aether", "file": "dist/brewing.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/swap-shop.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/hollow-battle.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/bestiary.html", "folder": "Moonlight in the Aether" },
-    { "source": "aether", "file": "dist/witch-up-close.html", "folder": "Moonlight in the Aether" },
-
-    { "source": "aethermoor", "file": "aethermoor-interactive-image-map-polished.html", "folder": "Aethermoor" },
-    { "source": "aethermoor", "file": "aethermoor-character-sheet-4.html", "folder": "Aethermoor" },
-
-    { "source": "envoi", "file": "dist/*.html", "exclude": "*.artifact.html", "folder": "Envoi on the Longest Night" },
-    { "source": "envoi", "file": "reference/demos/*.html", "folder": "Envoi on the Longest Night/Reference demos", "saveKeyPrefix": "envoi-ref-" }
-  ]
+  "map3d": {
+   "repo": "chriskizer91-ops/what_the_map_forgot",
+   "ref": "ccr-9c545e56-4m3vqr",
+   "paths": [
+    "/wren-3d/dist/*.html"
+   ]
+  },
+  "witchway": {
+   "repo": "chriskizer91-ops/follow-me-down-witch-way",
+   "ref": "claude/bold-turing-t225o0",
+   "build": [
+    "python3",
+    "tools/build_single.py"
+   ]
+  },
+  "witchroad": {
+   "repo": "chriskizer91-ops/follow-me-down-witch-way",
+   "ref": "ccr-4b49ab19-vv72q2",
+   "build": [
+    "sh",
+    "-c",
+    "python3 tools/build_one_moon.py --out dist/one-moon.html && python3 tools/build_condensed.py --out dist/the-short-road.html"
+   ]
+  },
+  "aether": {
+   "repo": "chriskizer91-ops/20-min",
+   "ref": "ccr-c41cdbf6-3p3qws",
+   "paths": [
+    "/dist/*.html",
+    "/sunstone-skies/dist/*.html"
+   ]
+  },
+  "aethergame": {
+   "repo": "chriskizer91-ops/20-min",
+   "ref": "ccr-5afa0fa7-7ojc16",
+   "paths": [
+    "/dist/game.html"
+   ]
+  },
+  "witchhd": {
+   "repo": "chriskizer91-ops/20-min",
+   "ref": "claude/stoic-cannon-9qxgh1",
+   "paths": [
+    "/witch-hd/square.html",
+    "/witch-hd/viewer.html",
+    "/witch-hd/witch-hd.glb"
+   ]
+  },
+  "aethermoor": {
+   "repo": "chriskizer91-ops/New-game",
+   "ref": "claude/tender-babbage-4wiplk",
+   "paths": [
+    "/*.html",
+    "/thareia/game/dist/*.html",
+    "/thareia/demo/dist/*.html",
+    "/thareia/demo2/dist/*.html",
+    "/thareia/art-in/airship/*.html",
+    "/thareia/sfx/dist/*.html"
+   ]
+  },
+  "hearth": {
+   "repo": "chriskizer91-ops/New-game",
+   "ref": "claude/cool-ptolemy-uc93gg",
+   "paths": [
+    "/game/dist/*.html"
+   ]
+  },
+  "skies": {
+   "repo": "chriskizer91-ops/airship-game-in-aethermoor-",
+   "ref": "claude/laughing-fermat-ow3rfs",
+   "paths": [
+    "/dist/*.html",
+    "/polished/dist/*.html",
+    "/stage4/dist/*.html",
+    "/reference/*.html"
+   ]
+  },
+  "envoi": {
+   "repo": "chriskizer91-ops/envoi-on-the-longest-night",
+   "build": [
+    "node",
+    "tools/build.mjs"
+   ]
+  },
+  "envoifinal": {
+   "repo": "chriskizer91-ops/envoi-on-the-longest-night",
+   "ref": "claude/send-note-gigdew",
+   "paths": [
+    "/final-pass-polish-october-5-2026/*.html"
+   ]
+  },
+  "envoidraft": {
+   "repo": "chriskizer91-ops/envoi-on-the-longest-night",
+   "ref": "ccr-31761774-76j8j3",
+   "paths": [
+    "/envoi-final-draft/*.html",
+    "/envoi-final-draft/cutscenes/*/*.html",
+    "/3d-cutscenes/*.html",
+    "/3d-model-field-studies/*/*.html",
+    "/3d-model-main-characters/*/*.html",
+    "/3d-model-new-character-ideas/*/*.html",
+    "/living-battlefields/*.html"
+   ]
+  },
+  "envoiancient": {
+   "repo": "chriskizer91-ops/envoi-on-the-longest-night",
+   "ref": "claude/sleepy-dirac-t4ftx0",
+   "paths": [
+    "/3d-model-new-character-ideas/bramble-ancient/*.html"
+   ]
+  },
+  "envoiguide": {
+   "repo": "chriskizer91-ops/envoi-on-the-longest-night",
+   "ref": "claude/hopeful-lovelace-z2hzjx",
+   "paths": [
+    "/the-real-final-pass-game-guide/*.html"
+   ]
+  },
+  "atoms": {
+   "repo": "chriskizer91-ops/atoms-games-",
+   "ref": "claude/vigilant-maxwell-dxhrgy",
+   "paths": [
+    "/creature-catch/*.html",
+    "/creature-catch/companion/*.html",
+    "/fresh-grad/v1-original/*.html",
+    "/fresh-grad/v2-visual-upgrade/index.html"
+   ]
+  },
+  "freshgrad": {
+   "repo": "chriskizer91-ops/atoms-games-",
+   "ref": "ccr-435b7598-zqdq0o",
+   "paths": [
+    "/fresh-grad/dist/*.html"
+   ]
+  },
+  "brightvein": {
+   "repo": "chriskizer91-ops/brightvein",
+   "ref": "claude/zen-bardeen-nyw8c4",
+   "paths": [
+    "/dist/brightvein.html"
+   ]
+  },
+  "creekfolk": {
+   "repo": "chriskizer91-ops/creek-folk",
+   "ref": "claude/sharp-pasteur-89xzfc",
+   "paths": [
+    "/releases/*.html",
+    "/creekfolk2/releases/*.html"
+   ]
+  },
+  "creekfolk3c": {
+   "repo": "chriskizer91-ops/creek-folk",
+   "ref": "phase-3c",
+   "paths": [
+    "/releases/creekfolk-phase3c.html"
+   ]
+  },
+  "creekcare": {
+   "repo": "chriskizer91-ops/creeks",
+   "ref": "ccr-ef7e4042-wgyo22",
+   "build": [
+    "sh",
+    "-c",
+    "mkdir -p dist && python3 tools/bundle.py dist/creek-care.html --embed"
+   ]
+  },
+  "stranded": {
+   "repo": "chriskizer91-ops/cursed-worlds",
+   "ref": "claude/jolly-mendel-bqoxiy",
+   "build": [
+    "sh",
+    "-c",
+    "cd the-clearing-stranded && node tools/build-game.mjs --out Stranded.html"
+   ]
+  },
+  "ranch": {
+   "repo": "chriskizer91-ops/cursed-worlds",
+   "ref": "claude/practical-bohr-smpp6z",
+   "build": [
+    "sh",
+    "-c",
+    "mkdir -p the-ranch/dist && node the-ranch/tools/build.mjs --out the-ranch/dist/the-ranch.html"
+   ]
+  },
+  "ideas": {
+   "repo": "chriskizer91-ops/different-ideas-",
+   "ref": "claude/busy-franklin-nvn852",
+   "paths": [
+    "/tiny-dominion/*.html",
+    "/tiny-dominion/original/*.html",
+    "/rain-check/*.html",
+    "/rain-check/original/*.html"
+   ]
+  },
+  "artfarm": {
+   "repo": "chriskizer91-ops/farm-project",
+   "paths": [
+    "/art-farm/dist/*.html",
+    "/art-farm/versions/*.html"
+   ]
+  },
+  "sandcastle": {
+   "repo": "chriskizer91-ops/sand",
+   "ref": "claude/eager-johnson-ij9j8z",
+   "paths": [
+    "/sandcastle-cays/builds/*.html"
+   ]
+  },
+  "windwing": {
+   "repo": "chriskizer91-ops/sand",
+   "ref": "claude/jolly-pascal-d3lqs6",
+   "paths": [
+    "/wind-wing-wave-path-1/builds/*.html"
+   ]
+  },
+  "framewright": {
+   "repo": "chriskizer91-ops/3d-construction",
+   "ref": "claude/peaceful-galileo-erhjmh",
+   "paths": [
+    "/framewright/*.html",
+    "/polished/*.html"
+   ]
+  },
+  "framewright3l": {
+   "repo": "chriskizer91-ops/3d-construction",
+   "ref": "claude/wizardly-ramanujan-s4fwem",
+   "paths": [
+    "/framewright/Framewright_3-L.html"
+   ]
+  },
+  "framewright3k": {
+   "repo": "chriskizer91-ops/3d-construction",
+   "ref": "claude/laughing-fermi-58v1iu",
+   "paths": [
+    "/framewright/Framewright_3-K.html"
+   ]
+  },
+  "framewright2": {
+   "repo": "chriskizer91-ops/3d-construction",
+   "ref": "ccr-340d2a55-j9idmf",
+   "paths": [
+    "/framewright/dist/*.html",
+    "/framewright2-systems/dist/*.html",
+    "/framewright2-systems/reference/*.html"
+   ]
+  },
+  "moonfaire": {
+   "repo": "chriskizer91-ops/moon-faire",
+   "ref": "claude/flipbook-art-source",
+   "paths": [
+    "/flipbook-art-source/night-of-no-moon.html",
+    "/flipbook-art-source/hd/",
+    "/flipbook-art-source/jester_witch_spritesheet.png"
+   ]
+  },
+  "moonmusic": {
+   "repo": "chriskizer91-ops/moon-faire",
+   "ref": "ccr-d4490116-7cqwt4",
+   "paths": [
+    "/music-of-the-moon-faire/*/*.html",
+    "/music-of-the-moon-faire/*/*.opus"
+   ]
+  }
+ },
+ "games": [
+  {
+   "source": "map",
+   "file": "what-the-map-forgot.html",
+   "folder": "What the Map Forgot",
+   "opts": {
+    "frame": false
+   }
+  },
+  {
+   "source": "map3d",
+   "file": "wren-3d/dist/game-3d.html",
+   "folder": "What the Map Forgot",
+   "exclude": "*.artifact.html"
+  },
+  {
+   "source": "map",
+   "file": "hatchling-v2/hatchling.html",
+   "folder": "What the Map Forgot/Hatchling",
+   "saveKey": "hatchling-v2",
+   "addScripts": [
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+   ]
+  },
+  {
+   "source": "map",
+   "file": "hatchling-v2/demos/*.html",
+   "folder": "What the Map Forgot/Hatchling/Demos",
+   "saveKeyPrefix": "hatchling-v2-",
+   "with": {
+    "sprites": "hatchling-v2/demos/src/sprites"
+   }
+  },
+  {
+   "source": "map",
+   "file": "hatchling/hatchling.html",
+   "folder": "What the Map Forgot/Hatchling/Earlier versions",
+   "saveKey": "hatchling-v1",
+   "addScripts": [
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+   ]
+  },
+  {
+   "source": "map",
+   "file": "hatchling/demos/*.html",
+   "folder": "What the Map Forgot/Hatchling/Earlier versions",
+   "saveKeyPrefix": "hatchling-v1-",
+   "with": {
+    "sprites": "hatchling/demos/src/sprites",
+    "img": "hatchling-v2/img"
+   }
+  },
+  {
+   "source": "map3d",
+   "file": "wren-3d/dist/*.html",
+   "folder": "What the Map Forgot/3D scenes",
+   "exclude": "*.artifact.html|game-3d*"
+  },
+  {
+   "source": "witchway",
+   "file": "dist/Follow_Me_Down_Witch_Way.html",
+   "folder": "Follow Me Down Witch Way",
+   "saveKey": "follow-me-down-witch-way"
+  },
+  {
+   "source": "witchroad",
+   "file": "dist/one-moon.html",
+   "folder": "Follow Me Down Witch Way",
+   "saveKey": "one-moon"
+  },
+  {
+   "source": "witchroad",
+   "file": "dist/the-short-road.html",
+   "folder": "Follow Me Down Witch Way",
+   "saveKey": "the-short-road"
+  },
+  {
+   "source": "witchroad",
+   "file": "materials/Witch-Way-Bundle/Game/Witch_Way_-_Path_Polish_-_2026-09-27.html",
+   "folder": "Follow Me Down Witch Way/Earlier versions",
+   "name": "Witch Way: Path Polish (27 Sept)",
+   "saveKey": "witch-way-path-polish"
+  },
+  {
+   "source": "witchroad",
+   "file": "materials/Follow_Me_Down_Witch_Way.html",
+   "folder": "Follow Me Down Witch Way/Earlier versions",
+   "name": "Witch Way: first version",
+   "saveKey": "witch-way-first-version"
+  },
+  {
+   "source": "aethergame",
+   "file": "dist/game.html",
+   "folder": "Moonlight in the Aether",
+   "name": "Moonlight in the Aether (the whole game)",
+   "saveKey": "moonlight-in-the-aether-game"
+  },
+  {
+   "source": "aether",
+   "file": "dist/title.html",
+   "folder": "Moonlight in the Aether/Scenes",
+   "name": "Moonlight in the Aether: title screen"
+  },
+  {
+   "source": "aether",
+   "file": "dist/wickhollow.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/wickhollow-square.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/gloamwood.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/bogmire.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/airship.html",
+   "folder": "Moonlight in the Aether/Scenes",
+   "saveKey": "moonlight-the-magpie"
+  },
+  {
+   "source": "aether",
+   "file": "dist/brewing.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/swap-shop.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/hollow-battle.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/bestiary.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "aether",
+   "file": "dist/witch-up-close.html",
+   "folder": "Moonlight in the Aether/Scenes"
+  },
+  {
+   "source": "witchhd",
+   "file": "witch-hd/*.html",
+   "folder": "Moonlight in the Aether/Scenes",
+   "saveKeyPrefix": "witch-hd-",
+   "with": {
+    "witch-hd.glb": "witch-hd/witch-hd.glb"
+   }
+  },
+  {
+   "source": "aether",
+   "file": "sunstone-skies/dist/*.html",
+   "folder": "Sunstone Skies",
+   "exclude": "*.artifact.html",
+   "saveKeyPrefix": "sunstone-"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m7.html",
+   "folder": "Aethermoor",
+   "name": "Aethermoor: Hearth & Heirloom",
+   "saveKey": "aethermoor-hearth-heirloom"
+  },
+  {
+   "source": "aethermoor",
+   "file": "aethermoor-interactive-image-map-polished.html",
+   "folder": "Aethermoor"
+  },
+  {
+   "source": "aethermoor",
+   "file": "aethermoor-character-sheet-4.html",
+   "folder": "Aethermoor"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m6.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 6",
+   "saveKey": "aethermoor-m6"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m5.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 5",
+   "saveKey": "aethermoor-m5"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m4.5.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 4.5",
+   "saveKey": "aethermoor-m4-5"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m4.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 4",
+   "saveKey": "aethermoor-m4"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m3.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 3",
+   "saveKey": "aethermoor-m3"
+  },
+  {
+   "source": "hearth",
+   "file": "game/dist/aethermoor-m2.html",
+   "folder": "Aethermoor/Earlier versions",
+   "name": "Hearth & Heirloom, milestone 2",
+   "saveKey": "aethermoor-m2"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/game/dist/thareia-t2.html",
+   "folder": "Thareia",
+   "name": "Thareia",
+   "saveKey": "thareia"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/game/dist/thareia-t1.html",
+   "folder": "Thareia/Earlier versions",
+   "name": "Thareia T1",
+   "saveKey": "thareia-t1"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/demo2/dist/thareia-demo-2.html",
+   "folder": "Thareia/Demos",
+   "saveKey": "thareia-demo-2"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/demo/dist/thareia-walk-test.html",
+   "folder": "Thareia/Demos",
+   "saveKey": "thareia-walk-test"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/art-in/airship/the-magpie-3d.html",
+   "folder": "Thareia/Demos",
+   "saveKey": "thareia-magpie-3d"
+  },
+  {
+   "source": "aethermoor",
+   "file": "thareia/sfx/dist/sound-board.html",
+   "folder": "Thareia/Demos",
+   "saveKey": "thareia-sound-board"
+  },
+  {
+   "source": "skies",
+   "file": "stage4/dist/game.html",
+   "folder": "Skies of Aethermoor",
+   "name": "Skies of Aethermoor (stage 4)",
+   "saveKey": "skies-stage4"
+  },
+  {
+   "source": "skies",
+   "file": "stage4/dist/hangar.html",
+   "folder": "Skies of Aethermoor",
+   "name": "Skies of Aethermoor: hangar (stage 4)",
+   "saveKey": "skies-stage4-hangar"
+  },
+  {
+   "source": "skies",
+   "file": "reference/the-magpie-over-aethermoor.html",
+   "folder": "Skies of Aethermoor",
+   "saveKey": "the-magpie-over-aethermoor"
+  },
+  {
+   "source": "skies",
+   "file": "polished/dist/game.html",
+   "folder": "Skies of Aethermoor/Earlier versions",
+   "name": "Skies of Aethermoor (polished)",
+   "saveKey": "skies-polished"
+  },
+  {
+   "source": "skies",
+   "file": "polished/dist/hangar.html",
+   "folder": "Skies of Aethermoor/Earlier versions",
+   "name": "Skies: hangar (polished)",
+   "saveKey": "skies-polished-hangar"
+  },
+  {
+   "source": "skies",
+   "file": "dist/game.html",
+   "folder": "Skies of Aethermoor/Earlier versions",
+   "name": "Skies of Aethermoor (first)",
+   "saveKey": "skies-first"
+  },
+  {
+   "source": "skies",
+   "file": "dist/hangar.html",
+   "folder": "Skies of Aethermoor/Earlier versions",
+   "name": "Skies: hangar (first)",
+   "saveKey": "skies-first-hangar"
+  },
+  {
+   "source": "envoifinal",
+   "file": "final-pass-polish-october-5-2026/Envoi on the Longest Night - final polish.html",
+   "folder": "Envoi on the Longest Night",
+   "name": "Envoi on the Longest Night",
+   "saveKey": "envoi-final-polish"
+  },
+  {
+   "source": "envoifinal",
+   "file": "final-pass-polish-october-5-2026/Envoi Sound Check.html",
+   "folder": "Envoi on the Longest Night/Extras",
+   "saveKey": "envoi-sound-check"
+  },
+  {
+   "source": "envoiguide",
+   "file": "the-real-final-pass-game-guide/envoi-real-final-pass-guide.html",
+   "folder": "Envoi on the Longest Night/Extras",
+   "saveKey": "envoi-guide"
+  },
+  {
+   "source": "envoidraft",
+   "file": "envoi-final-draft/Envoi-on-the-Longest-Night.html",
+   "folder": "Envoi on the Longest Night/Earlier versions",
+   "name": "Envoi: final draft (Oct 4)",
+   "saveKey": "envoi-final-draft"
+  },
+  {
+   "source": "envoidraft",
+   "file": "envoi-final-draft/cutscenes/*/*.html",
+   "folder": "Envoi on the Longest Night/Cutscenes",
+   "saveKeyPrefix": "envoi-cut-"
+  },
+  {
+   "source": "envoidraft",
+   "file": "3d-cutscenes/*.html",
+   "folder": "Envoi on the Longest Night/Cutscenes",
+   "exclude": "cutscene.html",
+   "saveKeyPrefix": "envoi-cut-"
+  },
+  {
+   "source": "envoidraft",
+   "file": "living-battlefields/*.html",
+   "folder": "Envoi on the Longest Night/3D models",
+   "exclude": "colossus-fight.html",
+   "saveKeyPrefix": "envoi-3d-"
+  },
+  {
+   "source": "envoidraft",
+   "file": "3d-model-field-studies/*/*.html",
+   "folder": "Envoi on the Longest Night/3D models",
+   "exclude": "[a-z]*.html",
+   "saveKeyPrefix": "envoi-3d-"
+  },
+  {
+   "source": "envoidraft",
+   "file": "3d-model-main-characters/*/*.html",
+   "folder": "Envoi on the Longest Night/3D models",
+   "exclude": "[a-z]*.html",
+   "saveKeyPrefix": "envoi-3d-"
+  },
+  {
+   "source": "envoidraft",
+   "file": "3d-model-new-character-ideas/*/*.html",
+   "folder": "Envoi on the Longest Night/3D models",
+   "exclude": "[a-z]*.html",
+   "saveKeyPrefix": "envoi-3d-"
+  },
+  {
+   "source": "envoiancient",
+   "file": "3d-model-new-character-ideas/bramble-ancient/*.html",
+   "folder": "Envoi on the Longest Night/3D models",
+   "exclude": "[a-z]*.html",
+   "saveKeyPrefix": "envoi-3d-"
+  },
+  {
+   "source": "envoi",
+   "file": "dist/*.html",
+   "exclude": "*.artifact.html",
+   "folder": "Envoi on the Longest Night/Characters"
+  },
+  {
+   "source": "envoi",
+   "file": "reference/demos/*.html",
+   "folder": "Envoi on the Longest Night/Reference demos",
+   "saveKeyPrefix": "envoi-ref-"
+  },
+  {
+   "source": "atoms",
+   "file": "creature-catch/creature-catch.html",
+   "folder": "Creature Catch",
+   "saveKey": "creature-catch"
+  },
+  {
+   "source": "atoms",
+   "file": "creature-catch/companion/creature-catch-field-guide.html",
+   "folder": "Creature Catch",
+   "saveKey": "creature-catch-field-guide"
+  },
+  {
+   "source": "freshgrad",
+   "file": "fresh-grad/dist/FreshGrad_Seasons.html",
+   "folder": "Fresh Grad Seasons",
+   "name": "Fresh Grad Seasons",
+   "saveKey": "fresh-grad-seasons"
+  },
+  {
+   "source": "atoms",
+   "file": "fresh-grad/v2-visual-upgrade/index.html",
+   "folder": "Fresh Grad Seasons/Earlier versions",
+   "name": "Fresh Grad Seasons (v2, drawn in code)",
+   "saveKey": "fresh-grad-v2"
+  },
+  {
+   "source": "atoms",
+   "file": "fresh-grad/v1-original/Fresh_Grad_Seasons.html",
+   "folder": "Fresh Grad Seasons/Earlier versions",
+   "name": "Fresh Grad Seasons (first)",
+   "saveKey": "fresh-grad-v1"
+  },
+  {
+   "source": "brightvein",
+   "file": "dist/brightvein.html",
+   "folder": "",
+   "saveKey": "brightvein"
+  },
+  {
+   "source": "creekfolk",
+   "file": "creekfolk2/releases/creekfolk2-phase3.html",
+   "folder": "Creekfolk",
+   "name": "Creekfolk 2",
+   "saveKey": "creekfolk2"
+  },
+  {
+   "source": "creekfolk3c",
+   "file": "releases/creekfolk-phase3c.html",
+   "folder": "Creekfolk",
+   "name": "Creekfolk",
+   "saveKey": "creekfolk"
+  },
+  {
+   "source": "creekfolk",
+   "file": "creekfolk2/releases/creekfolk2-phase2.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk 2, phase 2",
+   "saveKey": "creekfolk2-phase2"
+  },
+  {
+   "source": "creekfolk",
+   "file": "creekfolk2/releases/creekfolk2-phase1.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk 2, phase 1",
+   "saveKey": "creekfolk2-phase1"
+  },
+  {
+   "source": "creekfolk",
+   "file": "releases/creekfolk-phase3b.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk, phase 3b",
+   "saveKey": "creekfolk-phase3b"
+  },
+  {
+   "source": "creekfolk",
+   "file": "releases/creekfolk-phase3a.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk, phase 3a",
+   "saveKey": "creekfolk-phase3a"
+  },
+  {
+   "source": "creekfolk",
+   "file": "releases/creekfolk-phase2.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk, phase 2",
+   "saveKey": "creekfolk-phase2"
+  },
+  {
+   "source": "creekfolk",
+   "file": "releases/creekfolk-phase1.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk, phase 1",
+   "saveKey": "creekfolk-phase1"
+  },
+  {
+   "source": "creekfolk",
+   "file": "releases/creekfolk-original.html",
+   "folder": "Creekfolk/Earlier versions",
+   "name": "Creekfolk, original",
+   "saveKey": "creekfolk-original"
+  },
+  {
+   "source": "creekcare",
+   "file": "dist/creek-care.html",
+   "folder": "",
+   "name": "Creek Care",
+   "saveKey": "creek-care"
+  },
+  {
+   "source": "stranded",
+   "file": "the-clearing-stranded/Stranded.html",
+   "folder": "Stranded",
+   "saveKey": "stranded"
+  },
+  {
+   "source": "stranded",
+   "file": "the-clearing-stranded/living/Stranded_Living_Camp.html",
+   "folder": "Stranded",
+   "saveKey": "stranded-living-camp"
+  },
+  {
+   "source": "stranded",
+   "file": "the-clearing-stranded/versions/*.html",
+   "folder": "Stranded/Earlier versions",
+   "saveKeyPrefix": "stranded-"
+  },
+  {
+   "source": "ranch",
+   "file": "the-ranch/dist/the-ranch.html",
+   "folder": "The Ranch",
+   "saveKey": "the-ranch"
+  },
+  {
+   "source": "ranch",
+   "file": "the-ranch/versions/*.html",
+   "folder": "The Ranch/Earlier versions",
+   "saveKeyPrefix": "the-ranch-"
+  },
+  {
+   "source": "ideas",
+   "file": "tiny-dominion/Tiny_Dominion.html",
+   "folder": "Tiny Dominion",
+   "saveKey": "tiny-dominion"
+  },
+  {
+   "source": "ideas",
+   "file": "tiny-dominion/original/*.html",
+   "folder": "Tiny Dominion/Earlier versions",
+   "saveKey": "tiny-dominion-original"
+  },
+  {
+   "source": "ideas",
+   "file": "rain-check/rain-check.html",
+   "folder": "Rain Check",
+   "saveKey": "rain-check"
+  },
+  {
+   "source": "ideas",
+   "file": "rain-check/original/*.html",
+   "folder": "Rain Check/Earlier versions",
+   "saveKey": "rain-check-original"
+  },
+  {
+   "source": "artfarm",
+   "file": "art-farm/dist/art-farm.html",
+   "folder": "Art Farm",
+   "saveKey": "art-farm",
+   "exclude": "*.artifact.html"
+  },
+  {
+   "source": "artfarm",
+   "file": "art-farm/versions/*.html",
+   "folder": "Art Farm/Earlier versions",
+   "saveKeyPrefix": "art-farm-"
+  },
+  {
+   "source": "sandcastle",
+   "file": "sandcastle-cays/builds/*.html",
+   "folder": "",
+   "saveKey": "sandcastle-cays"
+  },
+  {
+   "source": "windwing",
+   "file": "wind-wing-wave-path-1/builds/*.html",
+   "folder": "",
+   "saveKey": "wind-wing-wave"
+  },
+  {
+   "source": "framewright",
+   "file": "framewright/Framewright_3-M.html",
+   "folder": "Framewright",
+   "name": "Framewright (3-M)",
+   "saveKey": "framewright-3"
+  },
+  {
+   "source": "framewright3l",
+   "file": "framewright/Framewright_3-L.html",
+   "folder": "Framewright/Earlier versions",
+   "name": "Framewright 3-L",
+   "saveKey": "framewright-3l"
+  },
+  {
+   "source": "framewright3k",
+   "file": "framewright/Framewright_3-K.html",
+   "folder": "Framewright/Earlier versions",
+   "name": "Framewright 3-K",
+   "saveKey": "framewright-3k"
+  },
+  {
+   "source": "framewright2",
+   "file": "framewright2-systems/dist/*.html",
+   "folder": "Framewright/Earlier versions",
+   "exclude": "*.artifact.html",
+   "saveKeyPrefix": "framewright-2s-"
+  },
+  {
+   "source": "framewright2",
+   "file": "framewright/dist/*.html",
+   "folder": "Framewright/Earlier versions",
+   "exclude": "*.artifact.html",
+   "saveKeyPrefix": "framewright-1-"
+  },
+  {
+   "source": "framewright2",
+   "file": "framewright2-systems/reference/*.html",
+   "folder": "Framewright/Earlier versions",
+   "saveKeyPrefix": "framewright-ref-"
+  },
+  {
+   "source": "framewright",
+   "file": "polished/*.html",
+   "folder": "Estate builds",
+   "saveKeyPrefix": "estate-"
+  },
+  {
+   "source": "moonfaire",
+   "file": "flipbook-art-source/night-of-no-moon.html",
+   "folder": "Moon Faire",
+   "saveKey": "night-of-no-moon",
+   "with": {
+    "hd": "flipbook-art-source/hd",
+    "jester_witch_spritesheet.png": "flipbook-art-source/jester_witch_spritesheet.png"
+   }
+  },
+  {
+   "source": "moonmusic",
+   "file": "music-of-the-moon-faire/*/*.html",
+   "folder": "Moon Faire",
+   "saveKeyPrefix": "moon-faire-music-",
+   "exclude": "page.html",
+   "with": {
+    "carnival-of-ashes.opus": "music-of-the-moon-faire/carnival-of-ashes/carnival-of-ashes.opus"
+   }
+  }
+ ]
 }

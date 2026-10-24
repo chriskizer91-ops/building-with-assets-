@@ -5,7 +5,7 @@ name: Build the Mooncart app
 
 on:
   push:
-    paths: ['web/**', 'android/**', 'tools/**', 'samples/**', 'games.json', 'package.json', 'package-lock.json', '.github/workflows/build-app.yml']
+    paths: ['web/**', 'android/**', 'desktop/**', 'tools/**', 'samples/**', 'games.json', 'package.json', 'package-lock.json', '.github/workflows/build-app.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -58,6 +58,16 @@ jobs:
         run: |
           npm ci
           node tools/build-demo.mjs --standalone
+      - name: Build Mooncart for Windows (the console in its own window, no web browser)
+        run: |
+          (cd desktop && npm ci --no-audit --no-fund)
+          node desktop/build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mooncart-windows
+          path: build/desktop/Mooncart-Windows.zip
+          compression-level: 0
+          retention-days: 90
       - uses: actions/upload-artifact@v4
         with:
           name: Mooncart-app
@@ -124,6 +134,10 @@ jobs:
           path: web
       - uses: actions/download-artifact@v4
         with:
+          name: Mooncart-windows
+          path: windows
+      - uses: actions/download-artifact@v4
+        with:
           name: game-list
           path: list
       - uses: actions/download-artifact@v4
@@ -152,8 +166,10 @@ jobs:
             s += "2. Open it. If Android asks, allow your browser (or Files app) to install unknown apps.\n";
             s += "3. Open Mooncart. Everything is inside, so it works in airplane mode from then on.\n\n";
             s += "Keep a copy of the .apk on a memory card or a computer: it reinstalls Mooncart on any Android 7 or newer phone, no internet needed.\n\n";
-            s += "## On a laptop\n\n";
-            s += "Download **Mooncart.html** below and open it in Chrome or Edge. Add your games with MENU › File › Add games…; they stay in that browser on that laptop. It needs no internet.\n\n";
+            s += "## On a Windows laptop\n\n";
+            s += "Download **Mooncart-Windows.zip** below, unzip it, and open **Mooncart.exe** in the folder. It is its own app, with every game inside, and needs no web browser and no internet. ";
+            s += "The first time, Windows may say it protected your PC: click **More info**, then **Run anyway**.\n\n";
+            s += "Or download **Mooncart.html** below and open it in Chrome or Edge. Add your games with MENU › File › Add games…; they stay in that browser on that laptop. It needs no internet.\n\n";
             s += "The android-* pictures below show this exact build on an Android 14 emulator set up like a cheap phone (a 720 x 1600 screen), in airplane mode.\n\n";
             s += "## Games inside (" + c.games.length + ")\n\n";
             for (const [f, gs] of Object.entries(byFolder)) {
@@ -175,5 +191,6 @@ jobs:
           files: |
             apk/Mooncart-*.apk
             web/Mooncart.html
+            windows/Mooncart-Windows.zip
             phone-test/screens/*
           make_latest: true

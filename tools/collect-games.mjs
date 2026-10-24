@@ -58,9 +58,15 @@ for (const [id, src] of Object.entries(manifest.sources)) {
   try {
     if (LOCAL) {
       const from = path.join(String(LOCAL), repoName);
-      const tar = execFileSync('git', ['-C', from, 'archive', src.ref || 'HEAD'], { maxBuffer: 4 * 1024 ** 3 });
+      // a branch named in games.json may only be fetched (origin/<branch>) in a local checkout
+      let ref = src.ref || 'HEAD';
+      if (src.ref) {
+        const has = (r) => spawnSync('git', ['-C', from, 'rev-parse', '--verify', '--quiet', r + '^{commit}']).status === 0;
+        if (!has(ref) && has('origin/' + ref)) ref = 'origin/' + ref;
+      }
+      const tar = execFileSync('git', ['-C', from, 'archive', ref], { maxBuffer: 4 * 1024 ** 3 });
       execFileSync('tar', ['-x', '-C', dir], { input: tar, maxBuffer: 4 * 1024 ** 3 });
-      info.commit = execFileSync('git', ['-C', from, 'rev-parse', src.ref || 'HEAD']).toString().trim();
+      info.commit = execFileSync('git', ['-C', from, 'rev-parse', ref]).toString().trim();
     } else {
       fs.rmSync(dir, { recursive: true, force: true });
       info.private = await isPrivate(src.repo);
@@ -125,15 +131,35 @@ function getter(url) {
   return fetched.get(url);
 }
 
+// A path with * in any part (folders too); [a-z] picks one letter. 'exclude' (one pattern, or several joined by |)
+// is matched against the file name.
 function expand(dir, pattern, exclude) {
-  const rel = pattern.split('/');
-  const base = rel.pop();
-  const folder = path.join(dir, ...rel);
-  const toRe = (glob) => new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
-  if (!base.includes('*')) return fs.existsSync(path.join(folder, base)) ? [[...rel, base].join('/')] : [];
-  if (!fs.existsSync(folder)) return [];
-  const re = toRe(base), ex = exclude ? toRe(exclude) : null;
-  return fs.readdirSync(folder).filter((f) => re.test(f) && !(ex && ex.test(f)) && fs.statSync(path.join(folder, f)).isFile()).sort().map((f) => [...rel, f].join('/'));
+  const toRe = (glob) => new RegExp('^' + glob.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+  // several patterns to leave out: 'a*|b*'
+  const ex = exclude ? new RegExp(String(exclude).split('|').map((x) => toRe(x).source).join('|')) : null;
+  let found = [''];
+  const parts = pattern.split('/');
+  parts.forEach((part, i) => {
+    const last = i === parts.length - 1;
+    const next = [];
+    for (const rel of found) {
+      const here = path.join(dir, rel);
+      if (!/[*[]/.test(part)) {
+        const p = path.join(here, part);
+        if (fs.existsSync(p) && (last ? fs.statSync(p).isFile() : fs.statSync(p).isDirectory())) next.push(rel ? rel + '/' + part : part);
+        continue;
+      }
+      if (!fs.existsSync(here) || !fs.statSync(here).isDirectory()) continue;
+      const re = new RegExp(toRe(part).source, 'i');
+      for (const f of fs.readdirSync(here).sort()) {
+        if (!re.test(f)) continue;
+        const st = fs.statSync(path.join(here, f));
+        if (last ? st.isFile() && !(ex && ex.test(f)) : st.isDirectory()) next.push(rel ? rel + '/' + f : f);
+      }
+    }
+    found = next;
+  });
+  return found;
 }
 
 const games = [];
@@ -157,10 +183,27 @@ for (const entry of manifest.games) {
       failed = r.report.failed;
       for (const f of failed) problems.push(`${entry.source}/${rel}: could not pack ${f}`);
     }
+    // 'addScripts': scripts a page loads by itself while it runs (so the packer can't see them), put in its <head>
+    for (const url of entry.addScripts || []) {
+      try {
+        const { bytes } = await getter(url);
+        const code = Buffer.from(bytes).toString('utf8').replace(/<\/script/gi, '<\\/script');
+        const tag = `<script>/* packed for offline play from ${url} */\n${code}\n</script>`;
+        const h = /<head\b[^>]*>/i.exec(html);
+        html = h ? html.slice(0, h.index + h[0].length) + tag + html.slice(h.index + h[0].length) : tag + html;
+        packed.push(url);
+      } catch (e) { problems.push(`${entry.source}/${rel}: could not add ${url}`); }
+    }
     const buf = Buffer.from(html, 'utf8');
     const outRel = `${entry.source}/${rel.split('/').map((p) => p.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')}`;
     fs.mkdirSync(path.dirname(path.join(OUT, outRel)), { recursive: true });
     fs.writeFileSync(path.join(OUT, outRel), buf);
+    // 'with': folders the page reads pictures or sounds from, copied next to it ({ "where it looks": "where they are" })
+    for (const [dest, from] of Object.entries(entry.with || {})) {
+      const f = path.join(dir, from);
+      if (fs.existsSync(f)) fs.cpSync(f, path.join(OUT, path.dirname(outRel), dest), { recursive: true });
+      else problems.push(`${entry.source}/${rel}: ${from} not found`);
+    }
     let saveKey = entry.saveKey || ((entry.saveKeyPrefix || '') + saveKeyFor(title, path.basename(rel)));
     saveKey = slug(saveKey) || 'game';
     // two different games never share a save slot unless games.json says so

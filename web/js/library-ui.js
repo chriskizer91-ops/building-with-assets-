@@ -117,7 +117,7 @@ export class LibraryView {
           { label: 'Save a copy of Mooncart…', disabled: native.platform !== 'android', action: () => this.saveApk() },
           { sep: true },
           { label: 'Close menu', accel: 'Esc', action: () => this.close() },
-          { label: 'Quit Mooncart', disabled: native.platform !== 'android', action: () => native.exit() },
+          { label: 'Quit Mooncart', disabled: native.platform !== 'android' && !native.desktop, action: () => native.exit() },
         ],
       },
       {
@@ -763,7 +763,7 @@ export class LibraryView {
   about() {
     return native.info().then((i) => alertBox('About Mooncart',
       `Mooncart ${this.version}\nA retro console for single-file HTML games.\n\n` +
-      `Running on: ${i.platform === 'android' ? `Android ${i.android || ''}${i.model ? ' (' + i.model + ')' : ''}` : i.platform === 'web' ? (i.demo ? 'the demo page, in a web browser' : 'a web browser') : 'a desktop browser (test mode)'}\n` +
+      `Running on: ${i.platform === 'android' ? `Android ${i.android || ''}${i.model ? ' (' + i.model + ')' : ''}` : i.platform === 'web' ? (i.demo ? 'the demo page, in a web browser' : 'a web browser') : native.desktop ? 'the Mooncart app on a computer' : 'a desktop browser (test mode)'}\n` +
       (i.webview ? `Web engine: ${i.webview}\n` : '') +
       `\nFonts: Pixelify Sans and Jacquard 12, under the SIL Open Font License.`));
   }

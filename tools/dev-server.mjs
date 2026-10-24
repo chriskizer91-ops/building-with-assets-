@@ -17,6 +17,8 @@ import { writeZip, readZip } from './zip.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : '1']] : a), []));
 const PORT = Number(args.port || process.env.PORT || 8090);
+// the Windows app listens on this computer only (127.0.0.1), so no firewall question pops up
+const HOST = args.host || process.env.MOONCART_HOST || undefined;
 const DATA = path.resolve(args.data || process.env.MOONCART_DATA || path.join(ROOT, '.dev-data'));
 const COLLECTION = path.resolve(args.collection || process.env.MOONCART_COLLECTION || path.join(ROOT, 'build', 'collection'));
 const WEB = path.join(ROOT, 'web');
@@ -185,4 +187,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Mooncart test server: http://localhost:${PORT}/   data: ${DATA}   built-in games: ${COLLECTION}`));
+server.listen(PORT, HOST, () => console.log(`Mooncart test server: http://localhost:${PORT}/   data: ${DATA}   built-in games: ${COLLECTION}`));

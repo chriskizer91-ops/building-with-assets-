@@ -1,0 +1,11 @@
+{
+  "name": "mooncart-desktop-build",
+  "private": true,
+  "type": "module",
+  "description": "Builds Mooncart for Windows: node desktop/build.mjs (see the README)",
+  "devDependencies": {
+    "@electron/packager": "18.3.6",
+    "electron": "33.2.1",
+    "resedit": "2.0.3"
+  }
+}

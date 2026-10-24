@@ -14,27 +14,36 @@ on a laptop, as one file you open in a web browser.
 ## Put it on a phone
 
 1. On the Android phone, open **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**.
-2. Tap **Mooncart-….apk** to download it (about 40 MB; about 100 MB once the two private games are built in, see below).
+2. Tap **Mooncart-….apk** to download it (about 450 MB with every game inside).
 3. Open the download. Android asks whether your browser may install apps: allow it, then tap **Install**.
 4. Open **Mooncart**. From now on you can turn on airplane mode.
 
-It runs on Android 7.0 or newer. A $50 phone is fine. Very large games (the 35 MB Witch Way
-version) take a few seconds to start on a slow phone.
+It runs on Android 7.0 or newer. A $50 phone is fine. Very large games (the 30 MB ones: Witch Way, Hearth & Heirloom)
+take a few seconds to start on a slow phone. The phone needs about 2 GB free to install it.
 
 To add your own games on the phone: **MENU › File › Add games…**. To take out a built-in game you
 don't want: pick it in the library, then **Edit › Remove…**.
 
-## On a laptop
+## On a laptop (Windows)
 
-1. From **[the Releases page](https://github.com/chriskizer91-ops/building-with-assets-/releases/latest)**,
-   download **Mooncart.html** (about half a megabyte).
-2. Open it. It opens in your web browser; Chrome or Edge work best.
-3. Add your games: **MENU › File › Add games…** (or *Add a folder of games…*).
+Mooncart is also a Windows app: its own window with the moon icon, every game inside, no web browser
+and no internet.
 
-It's the same console, with two small sample games in it (Starfall and Button Check). The games you
-add and their saved progress stay in that browser on that laptop, and it needs no internet. Keep
-your game files too: clearing the browser's data, or opening Mooncart.html in a different browser,
-starts it empty again. Backups and *Save a copy of Mooncart* are only in the phone app.
+1. Download **Mooncart-Windows.zip** (from the Releases page, or the copy Claude sent you).
+2. Unzip it (right-click › *Extract All…*), somewhere you'll keep it, like Documents.
+3. Open the **Mooncart** folder and double-click **Mooncart.exe**. To find it again, right-click it ›
+   *Show more options* › *Pin to Start* (or *Send to › Desktop*).
+4. The first time, Windows may say it protected your PC (the app isn't from the Microsoft Store):
+   click **More info**, then **Run anyway**. It only asks once.
+
+Keys: arrow keys move, **Enter** is A, **Escape** is B, **M** is START, **H** is SELECT. **F11** (or Alt+Enter) is full screen.
+Saves are kept in your Windows user folder (`AppData\Roaming\Mooncart`), so unzipping a newer Mooncart over
+the old one keeps them. **File › Back up everything…** works here too.
+
+**In a web browser instead.** `Mooncart.html` (about half a megabyte, also on the Releases page) is the same
+console as one page you open in Chrome or Edge, with two small sample games (Starfall and Button Check). Add
+your games with **MENU › File › Add games…**; they stay in that browser on that laptop. Clearing the browser's
+data starts it empty again.
 
 ## Playing
 
@@ -87,12 +96,24 @@ slot named after its title. A newer version of a game with the same title picks 
 
 ## The games inside
 
-The built-in games are listed in [`games.json`](games.json): What the Map Forgot, Follow Me Down Witch Way
-(the latest build plus two earlier versions), the eleven Moonlight in the Aether demos, the Aethermoor map and
-character ledger, and the Envoi on the Longest Night model pages and reference demos. 31 games, about 150 MB.
+Every game from all your repositories, the newest version of each, listed in [`games.json`](games.json), each
+in its own folder in the library, with older versions in an *Earlier versions* folder beside it:
 
-**Games from private repositories.** What the Map Forgot and Follow Me Down Witch Way live in private
-repositories, and this one is public. The build can only include them if it has a key that can read them,
+What the Map Forgot (and in 3D, its 3D scenes, and Hatchling), Follow Me Down Witch Way (and One Moon and The
+Short Road), Moonlight in the Aether (the whole game and its scenes), Sunstone Skies, Aethermoor: Hearth &
+Heirloom (the map and the character ledger too), Thareia, Skies of Aethermoor and The Magpie over Aethermoor,
+Envoi on the Longest Night (with its guide, cutscenes, 3D models and characters), Creature Catch and its Field
+Guide, Fresh Grad Seasons, Brightvein, Creekfolk and Creekfolk 2, Creek Care, Stranded, The Ranch, Tiny
+Dominion, Rain Check, Art Farm, Sandcastle Cays, Wind, Wing & Wave, Framewright and the four estate builds,
+and Moon Faire's Night of No Moon and Carnival of Ashes. About 135 games, about 590 MB.
+
+Games with a page already built come straight from their repository; Witch Way, One Moon, The Short Road,
+Stranded, The Ranch, Creek Care and the Envoi characters are built from their code when the app is built.
+Everything they loaded from the internet (fonts, the 3D library) is packed into the pages.
+
+**Games from private repositories.** What the Map Forgot, Follow Me Down Witch Way, Framewright and the estate
+builds, and Art Farm live in private repositories, and this one is public. (The app Claude built on October 24
+has them all; this is about GitHub building it again by itself.) The build can only include them if it has a key that can read them,
 and it will never put an app with private games inside on a public Releases page. To include them:
 
 1. Make this repository private (**Settings › General › Danger Zone › Change visibility**), so its Releases page is private too.
@@ -103,8 +124,7 @@ and it will never put an app with private games inside on a public Releases page
    paste the token.
 4. **Actions › Build the Mooncart app › Run workflow.** The new `.apk` on the Releases page has all the games.
 
-Until then the app has the games from the public repositories, and you can add the other two on the phone
-with **File › Add games…**.
+Until then GitHub's builds have the games from the public repositories only.
 
 When a game changes, run the build again: on GitHub open **Actions › Build the Mooncart app › Run workflow**.
 It fetches every game repository fresh, builds the ones that need building, packs them in, makes the app,

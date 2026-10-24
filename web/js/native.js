@@ -126,9 +126,12 @@ function dev() {
   const origin = location.origin;
   const port = location.port ? ':' + location.port : '';
 
+  // the Windows app (desktop/) runs this same test server inside itself and adds a quit button
+  const desktop = window.mooncartDesktop || null;
   return {
     ...common,
     platform: 'dev',
+    desktop: !!desktop,
     info: () => json('info'),
     readText: (name) => api('text/' + encodeURIComponent(name)).then((r) => r.text()).then((t) => t || null).catch(() => null),
     writeText: (name, text) => api('text/' + encodeURIComponent(name), { method: 'PUT', body: text }).then(() => true, () => false),
@@ -182,7 +185,7 @@ function dev() {
     }),
     saveApk: async () => false,
     openExternal: (url) => window.open(url, '_blank', 'noopener'),
-    exit: () => {},
+    exit: () => { if (desktop) desktop.quit(); },
     ready: () => {},
   };
 }

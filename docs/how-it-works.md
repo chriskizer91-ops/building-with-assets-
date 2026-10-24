@@ -94,3 +94,30 @@ CDN files from a folder (for machines that can't reach the CDN).
   crashes, page errors and pages that reach for the internet (`Server` logs those as `internet: <address>`).
   Games that aren't in the build (the private ones) are skipped. The screenshots are uploaded as an artifact and
   a few go on the release page.
+
+## On a computer, as an app (`desktop/`)
+
+`desktop/main.mjs` is an Electron app (Windows, and Linux for testing) that runs `tools/dev-server.mjs`
+inside itself on `127.0.0.1:47390` and shows the console in its own window, so a laptop gets the whole
+console without a web browser: every game at its own address (`http://<slot>.localhost:47390/`, the same
+one-address-per-game as the phone), the built-in games from `resources/collection`, and the library, added
+games and backups in the user's folder (`%APPDATA%\Mooncart\library`). Every request that isn't for this
+computer is cancelled. **Never change the port**: a game's saves belong to its address, port included.
+
+- `node desktop/build.mjs` (after `cd desktop && npm install`) makes `build/desktop/Mooncart-Windows.zip`. It
+  needs no Windows tools: the icon and name go into `Mooncart.exe` with `resedit`.
+- `xvfb-run -a node desktop/try.mjs [--app <built Mooncart>] [--all]` opens the app, plays games and screenshots
+  each one, listing page errors and anything that reaches for the internet.
+- `native.js` still says `platform: 'dev'` there, plus `desktop: true` (from the preload's `window.mooncartDesktop`),
+  which turns on *Quit Mooncart*.
+
+## Building the phone app without the Android SDK
+
+`android/repack.py BASE.apk OUT.apk` takes an earlier build (from the Releases page), keeps its compiled parts,
+replaces `assets/web/` and `assets/collection/` with today's, and aligns and signs it with the same key using
+uber-apk-signer (`build/uber-apk-signer.jar`, from its GitHub releases). Only for changes to `web/` or the games;
+a change to the Java code needs `android/build.sh`.
+
+`tools/collect-games.mjs --mirror dir` packs pages on a machine that can't reach the web: three.js and Google
+Fonts were put in a mirror folder from npm (`three@0.128.0`, `@fontsource/*`), the stylesheets written by hand
+with the same weights the page asks for.
