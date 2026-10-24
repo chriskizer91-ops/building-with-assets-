@@ -7,15 +7,32 @@
 //
 // Nothing here reaches the internet: every request that isn't for this computer is cancelled.
 
-import { app, BrowserWindow, Menu, session, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, session, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 47390;
 
 if (!app.requestSingleInstanceLock()) app.quit();
+
+// *.localhost always means this computer, over IPv4 (the server listens on 127.0.0.1 only)
+app.commandLine.appendSwitch('host-resolver-rules', 'MAP localhost 127.0.0.1, MAP *.localhost 127.0.0.1');
+
+// what happened, for fixing it: %APPDATA%\Mooncart\mooncart-log.txt
+const logFile = () => path.join(app.getPath('userData'), 'mooncart-log.txt');
+function log(...a) {
+  const line = new Date().toISOString() + ' ' + a.map(String).join(' ') + '\n';
+  try { fs.mkdirSync(path.dirname(logFile()), { recursive: true }); fs.appendFileSync(logFile(), line); } catch {}
+}
+// if it can't start, say so and quit, rather than staying open with no window (which blocks the next try)
+function fail(e) {
+  log('could not start:', e && e.stack || e);
+  try { dialog.showErrorBox('Mooncart could not start', String(e && e.message || e) + '\n\nDetails are in ' + logFile()); } catch {}
+  app.exit(1);
+}
+process.on('uncaughtException', fail);
 
 // the built-in games sit next to the app (resources/collection), or in build/collection when testing
 const collection = process.env.MOONCART_COLLECTION || [path.join(process.resourcesPath || '', 'collection'), path.join(HERE, 'collection'), path.join(HERE, '..', 'build', 'collection')]
@@ -44,7 +61,9 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(['fullscreen', 'pointerLock', 'clipboard-sanitized-write', 'media'].includes(perm)));
 
   const server = path.join(HERE, 'tools', 'dev-server.mjs');
-  await import(fs.existsSync(server) ? server : path.join(HERE, '..', 'tools', 'dev-server.mjs'));
+  // a file address, not a path: on Windows import() can't take C:\...
+  await import(pathToFileURL(fs.existsSync(server) ? server : path.join(HERE, '..', 'tools', 'dev-server.mjs')).href);
+  log('started; games from', collection);
 
   win = new BrowserWindow({
     width: 1280, height: 760, minWidth: 480, minHeight: 320,
@@ -64,7 +83,7 @@ app.whenReady().then(async () => {
     if (input.control && input.shift && input.key.toLowerCase() === 'i') { win.webContents.toggleDevTools(); e.preventDefault(); }
   });
   await loadConsole();
-});
+}).catch(fail);
 
 async function loadConsole(tries = 40) {
   try { await win.loadURL(`http://localhost:${PORT}/`); }
