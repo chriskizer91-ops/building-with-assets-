@@ -1,0 +1,7 @@
+{
+  "name": "field-forest",
+  "private": true,
+  "type": "module",
+  "description": "Field & Forest: makes the environment models and the two pages (sh build.sh)",
+  "dependencies": { "three": "0.170.0", "esbuild": "0.28.2", "gltf-validator": "2.0.0-dev.3.10" }
+}

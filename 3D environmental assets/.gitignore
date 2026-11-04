@@ -1,0 +1,7 @@
+# made by source/build.sh and the tools: not kept
+source/out/
+source/shots/
+source/viewer/dist/
+source/viewer/src/data.js
+redline/test/*.html
+redline/test/shots/
