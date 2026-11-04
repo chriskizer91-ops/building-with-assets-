@@ -141,3 +141,9 @@ How it fits together, and the decisions behind it, are in [`docs/how-it-works.md
 
 Fonts: Pixelify Sans and Jacquard 12 (SIL Open Font License, `web/fonts/OFL.txt`), copied from
 `20-min/art/fonts/`.
+
+## Also in this repository: 3D environmental assets
+
+[`3D environmental assets/`](3D%20environmental%20assets/) is **Field & Forest**, a library of 19 environment
+models (grasses, bushes, trees and props) for any of the games, with two pages to look at them and build a forest,
+and the add-on that puts them into Redline County. It has its own README. Mooncart's build doesn't use it.
